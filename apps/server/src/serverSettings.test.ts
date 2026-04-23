@@ -210,6 +210,11 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             serverUrl: "  http://127.0.0.1:4096  ",
             serverPassword: "  secret-password  ",
           },
+          openclaw: {
+            gatewayUrl: "  ws://127.0.0.1:18789  ",
+            gatewayToken: "  secret-token  ",
+            gatewayPassword: "  secret-password  ",
+          },
         },
       });
 
@@ -230,6 +235,13 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         binaryPath: "/opt/homebrew/bin/opencode",
         serverUrl: "http://127.0.0.1:4096",
         serverPassword: "secret-password",
+        customModels: [],
+      });
+      assert.deepEqual(next.providers.openclaw, {
+        enabled: true,
+        gatewayUrl: "ws://127.0.0.1:18789",
+        gatewayToken: "secret-token",
+        gatewayPassword: "secret-password",
         customModels: [],
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),

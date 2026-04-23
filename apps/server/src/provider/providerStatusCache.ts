@@ -8,6 +8,7 @@ export const PROVIDER_CACHE_IDS = [
   "codex",
   "claudeAgent",
   "opencode",
+  "openclaw",
   "cursor",
 ] as const satisfies ReadonlyArray<ServerProvider["provider"]>;
 

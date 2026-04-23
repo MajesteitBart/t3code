@@ -51,10 +51,37 @@ export const ensureNodePtySpawnHelperExecutable = Effect.fn(function* (explicitP
   yield* fs.chmod(helperPath, 0o755).pipe(Effect.orElseSucceed(() => undefined));
 });
 
-class NodePtyProcess implements PtyProcess {
-  private readonly process: import("node-pty").IPty;
+interface NodePtyDisposable {
+  dispose(): void;
+}
 
-  constructor(process: import("node-pty").IPty) {
+interface NodePtyHandle {
+  readonly pid: number;
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+  kill(signal?: string): void;
+  onData(callback: (data: string) => void): NodePtyDisposable;
+  onExit(callback: (event: { exitCode: number; signal?: number }) => void): NodePtyDisposable;
+}
+
+interface NodePtyModule {
+  spawn(
+    file: string,
+    args?: ReadonlyArray<string>,
+    options?: {
+      cwd?: string;
+      cols?: number;
+      rows?: number;
+      env?: Record<string, string | undefined>;
+      name?: string;
+    },
+  ): NodePtyHandle;
+}
+
+class NodePtyProcess implements PtyProcess {
+  private readonly process: NodePtyHandle;
+
+  constructor(process: NodePtyHandle) {
     this.process = process;
   }
 
@@ -99,8 +126,15 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const requireForNodePty = createRequire(import.meta.url);
 
-    const nodePty = yield* Effect.promise(() => import("node-pty"));
+    const nodePty = yield* Effect.sync(() => {
+      try {
+        return requireForNodePty("node-pty") as NodePtyModule;
+      } catch {
+        return null;
+      }
+    });
 
     const ensureNodePtySpawnHelperExecutableCached = yield* Effect.cached(
       ensureNodePtySpawnHelperExecutable().pipe(
@@ -113,6 +147,17 @@ export const layer = Layer.effect(
     return {
       spawn: Effect.fn(function* (input) {
         yield* ensureNodePtySpawnHelperExecutableCached;
+
+        if (!nodePty) {
+          return yield* Effect.fail(
+            new PtySpawnError({
+              adapter: "node-pty",
+              message:
+                'Optional dependency "node-pty" is not installed. Install dependencies in an environment with native build tools, or run the server with Bun so it can use the Bun PTY adapter instead.',
+            }),
+          );
+        }
+
         const ptyProcess = yield* Effect.try({
           try: () =>
             nodePty.spawn(input.shell, input.args ?? [], {

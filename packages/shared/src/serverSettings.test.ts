@@ -144,4 +144,25 @@ describe("serverSettings helpers", () => {
       ],
     });
   });
+
+  it("replaces text generation selection for openclaw without leaking old options", () => {
+    const current = {
+      ...DEFAULT_SERVER_SETTINGS,
+      textGenerationModelSelection: createModelSelection("codex", "gpt-5.4-mini", [
+        { id: "reasoningEffort", value: "high" },
+      ]),
+    };
+
+    expect(
+      applyServerSettingsPatch(current, {
+        textGenerationModelSelection: {
+          provider: "openclaw",
+          model: "openai-codex/gpt-5.4",
+        },
+      }).textGenerationModelSelection,
+    ).toEqual({
+      provider: "openclaw",
+      model: "openai-codex/gpt-5.4",
+    });
+  });
 });

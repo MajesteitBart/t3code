@@ -10,10 +10,12 @@ import { ServerConfig } from "../../config.ts";
 import { ClaudeProviderLive } from "./ClaudeProvider.ts";
 import { CodexProviderLive } from "./CodexProvider.ts";
 import { CursorProviderLive } from "./CursorProvider.ts";
+import { OpenClawProviderLive } from "./OpenClawProvider.ts";
 import { OpenCodeProviderLive } from "./OpenCodeProvider.ts";
 import { ClaudeProvider } from "../Services/ClaudeProvider.ts";
 import { CodexProvider } from "../Services/CodexProvider.ts";
 import { CursorProvider } from "../Services/CursorProvider.ts";
+import { OpenClawProvider } from "../Services/OpenClawProvider.ts";
 import { OpenCodeProvider } from "../Services/OpenCodeProvider.ts";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry.ts";
 import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
@@ -83,6 +85,7 @@ const ProviderRegistryLiveBase = Layer.effect(
     const codexProvider = yield* CodexProvider;
     const claudeProvider = yield* ClaudeProvider;
     const openCodeProvider = yield* OpenCodeProvider;
+    const openClawProvider = yield* OpenClawProvider;
     const config = yield* ServerConfig;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -93,6 +96,7 @@ const ProviderRegistryLiveBase = Layer.effect(
       codex: codexProvider,
       claudeAgent: claudeProvider,
       opencode: openCodeProvider,
+      openclaw: openClawProvider,
       cursor: cursorProvider,
     }) satisfies ReadonlyArray<ProviderSnapshotSource>;
     const activeProviders = PROVIDER_CACHE_IDS;
@@ -259,6 +263,7 @@ export const ProviderRegistryLive = Layer.unwrap(
       Layer.provideMerge(CodexProviderLive),
       Layer.provideMerge(ClaudeProviderLive),
       Layer.provideMerge(OpenCodeProviderLive),
+      Layer.provideMerge(OpenClawProviderLive),
       Layer.provideMerge(OpenCodeRuntimeLive),
     ),
   ),

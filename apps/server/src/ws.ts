@@ -983,13 +983,9 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 })),
               );
 
-              yield* Effect.all(
-                [providerRegistry.refresh("codex"), providerRegistry.refresh("claudeAgent")],
-                {
-                  concurrency: "unbounded",
-                  discard: true,
-                },
-              ).pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
+              yield* providerRegistry
+                .refresh()
+                .pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
 
               const liveUpdates = Stream.merge(
                 keybindingsUpdates,

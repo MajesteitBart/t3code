@@ -110,6 +110,16 @@ export const OpenCodeSettings = Schema.Struct({
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
 });
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
+export const OpenClawSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  gatewayUrl: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed("ws://127.0.0.1:18789")),
+  ),
+  gatewayToken: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  gatewayPassword: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+});
+export type OpenClawSettings = typeof OpenClawSettings.Type;
 
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -138,6 +148,7 @@ export const ServerSettings = Schema.Struct({
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+    openclaw: OpenClawSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
@@ -189,6 +200,11 @@ const ModelSelectionPatch = Schema.Union([
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(ProviderOptionSelections),
   }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("openclaw")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(ProviderOptionSelections),
+  }),
 ]);
 
 const CodexSettingsPatch = Schema.Struct({
@@ -220,6 +236,14 @@ const OpenCodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const OpenClawSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  gatewayUrl: Schema.optionalKey(Schema.String),
+  gatewayToken: Schema.optionalKey(Schema.String),
+  gatewayPassword: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
@@ -238,6 +262,7 @@ export const ServerSettingsPatch = Schema.Struct({
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
       cursor: Schema.optionalKey(CursorSettingsPatch),
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
+      openclaw: Schema.optionalKey(OpenClawSettingsPatch),
     }),
   ),
 });

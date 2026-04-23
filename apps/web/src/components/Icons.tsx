@@ -578,6 +578,25 @@ export const OpenCodeIcon: Icon = (props) => (
   </svg>
 );
 
+export const OpenClawIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 32 32"
+    fill="none"
+    className={cn("fill-[#1F3B2E] dark:fill-[#D8F0E2]", className)}
+  >
+    <path d="M16 4.5c1.7 0 3 1.3 3 3v3.2c0 1.1.9 2 2 2h1.3c3.6 0 6.7 2.6 7.2 6.2.7 4.9-3.1 9.1-7.8 9.1H10.3c-4.7 0-8.5-4.2-7.8-9.1.5-3.6 3.6-6.2 7.2-6.2H11c1.1 0 2-.9 2-2V7.5c0-1.7 1.3-3 3-3Z" />
+    <path
+      d="M10.8 14.8c-.7-3.2-3.2-5.6-5.8-5.6-1.6 0-2.9 1.2-2.9 2.8 0 2.1 1.5 4.1 3.9 5.2M16 12.6c0-4-2.3-7.1-5.2-7.1-1.7 0-3 1.3-3 3 0 2.3 1.7 4.7 4.4 6.2M21.2 14.8c.7-3.2 3.2-5.6 5.8-5.6 1.6 0 2.9 1.2 2.9 2.8 0 2.1-1.5 4.1-3.9 5.2M16 12.6c0-4 2.3-7.1 5.2-7.1 1.7 0 3 1.3 3 3 0 2.3-1.7 4.7-4.4 6.2"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
 export const GithubCopilotIcon: Icon = ({ className, ...props }) => (
   <svg
     {...props}

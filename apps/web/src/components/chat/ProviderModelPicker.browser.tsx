@@ -455,6 +455,7 @@ describe("ProviderModelPicker", () => {
       codex: [{ slug: "gpt-5-codex", name: "GPT-5 Codex" }],
       cursor: [],
       opencode: [],
+      openclaw: [],
     } as const;
     const screen = await render(
       <ProviderModelPicker

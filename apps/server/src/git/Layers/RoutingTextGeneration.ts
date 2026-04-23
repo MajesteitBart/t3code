@@ -15,6 +15,7 @@ import { TextGeneration, type TextGenerationShape } from "../Services/TextGenera
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { CursorTextGenerationLive } from "./CursorTextGeneration.ts";
+import { OpenClawTextGenerationLive } from "./OpenClawTextGeneration.ts";
 import { OpenCodeTextGenerationLive } from "./OpenCodeTextGeneration.ts";
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,10 @@ class OpenCodeTextGen extends Context.Service<OpenCodeTextGen, TextGenerationSha
   "t3/git/Layers/RoutingTextGeneration/OpenCodeTextGen",
 ) {}
 
+class OpenClawTextGen extends Context.Service<OpenClawTextGen, TextGenerationShape>()(
+  "t3/git/Layers/RoutingTextGeneration/OpenClawTextGen",
+) {}
+
 // ---------------------------------------------------------------------------
 // Routing implementation
 // ---------------------------------------------------------------------------
@@ -47,6 +52,7 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
     claudeAgent: yield* ClaudeTextGen,
     cursor: yield* CursorTextGen,
     opencode: yield* OpenCodeTextGen,
+    openclaw: yield* OpenClawTextGen,
   };
 
   return {
@@ -93,6 +99,14 @@ const InternalOpenCodeLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(OpenCodeTextGenerationLive));
 
+const InternalOpenClawLayer = Layer.effect(
+  OpenClawTextGen,
+  Effect.gen(function* () {
+    const svc = yield* TextGeneration;
+    return svc;
+  }),
+).pipe(Layer.provide(OpenClawTextGenerationLive));
+
 export const RoutingTextGenerationLive = Layer.effect(
   TextGeneration,
   makeRoutingTextGeneration,
@@ -101,4 +115,5 @@ export const RoutingTextGenerationLive = Layer.effect(
   Layer.provide(InternalClaudeLayer),
   Layer.provide(InternalCursorLayer),
   Layer.provide(InternalOpenCodeLayer),
+  Layer.provide(InternalOpenClawLayer),
 );

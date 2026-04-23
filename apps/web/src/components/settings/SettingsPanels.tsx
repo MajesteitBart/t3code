@@ -104,12 +104,14 @@ type InstallProviderSettings = {
   provider: ProviderKind;
   title: string;
   badgeLabel?: string;
-  binaryPlaceholder: string;
-  binaryDescription: ReactNode;
+  binaryPlaceholder?: string;
+  binaryDescription?: ReactNode;
   serverUrlPlaceholder?: string;
   serverUrlDescription?: ReactNode;
   serverPasswordPlaceholder?: string;
   serverPasswordDescription?: ReactNode;
+  serverTokenPlaceholder?: string;
+  serverTokenDescription?: ReactNode;
   homePathKey?: "codexHomePath";
   homePlaceholder?: string;
   homeDescription?: ReactNode;
@@ -148,6 +150,19 @@ const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     serverPasswordPlaceholder: "Server password (optional)",
     serverPasswordDescription:
       "If your OpenCode server requires authentication, enter the password here. NOTE: Stored in plain text on disk",
+  },
+  {
+    provider: "openclaw",
+    title: "OpenClaw",
+    badgeLabel: "New",
+    serverUrlPlaceholder: "ws://127.0.0.1:18789",
+    serverUrlDescription: "WebSocket URL for the OpenClaw gateway.",
+    serverPasswordPlaceholder: "Gateway password (optional)",
+    serverPasswordDescription:
+      "Used when the gateway is configured with password auth. Stored in plain text on disk.",
+    serverTokenPlaceholder: "Gateway token (optional)",
+    serverTokenDescription:
+      "Used when the gateway is configured with token auth. Stored in plain text on disk.",
   },
 ] as const;
 
@@ -566,6 +581,15 @@ export function GeneralSettingsPanel() {
         DEFAULT_UNIFIED_SETTINGS.providers.opencode.serverPassword ||
       settings.providers.opencode.customModels.length > 0,
     ),
+    openclaw: Boolean(
+      settings.providers.openclaw.gatewayUrl !==
+        DEFAULT_UNIFIED_SETTINGS.providers.openclaw.gatewayUrl ||
+      settings.providers.openclaw.gatewayPassword !==
+        DEFAULT_UNIFIED_SETTINGS.providers.openclaw.gatewayPassword ||
+      settings.providers.openclaw.gatewayToken !==
+        DEFAULT_UNIFIED_SETTINGS.providers.openclaw.gatewayToken ||
+      settings.providers.openclaw.customModels.length > 0,
+    ),
   });
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
     Record<ProviderKind, string>
@@ -574,6 +598,7 @@ export function GeneralSettingsPanel() {
     claudeAgent: "",
     cursor: "",
     opencode: "",
+    openclaw: "",
   });
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>
@@ -796,12 +821,25 @@ export function GeneralSettingsPanel() {
       serverUrlDescription: providerSettings.serverUrlDescription,
       serverPasswordPlaceholder: providerSettings.serverPasswordPlaceholder,
       serverPasswordDescription: providerSettings.serverPasswordDescription,
+      serverTokenPlaceholder: providerSettings.serverTokenPlaceholder,
+      serverTokenDescription: providerSettings.serverTokenDescription,
       homePathKey: providerSettings.homePathKey,
       homePlaceholder: providerSettings.homePlaceholder,
       homeDescription: providerSettings.homeDescription,
-      binaryPathValue: providerConfig.binaryPath,
-      serverUrlValue: "serverUrl" in providerConfig ? providerConfig.serverUrl : "",
-      serverPasswordValue: "serverPassword" in providerConfig ? providerConfig.serverPassword : "",
+      binaryPathValue: "binaryPath" in providerConfig ? providerConfig.binaryPath : "",
+      serverUrlValue:
+        "serverUrl" in providerConfig
+          ? providerConfig.serverUrl
+          : "gatewayUrl" in providerConfig
+            ? providerConfig.gatewayUrl
+            : "",
+      serverPasswordValue:
+        "serverPassword" in providerConfig
+          ? providerConfig.serverPassword
+          : "gatewayPassword" in providerConfig
+            ? providerConfig.gatewayPassword
+            : "",
+      serverTokenValue: "gatewayToken" in providerConfig ? providerConfig.gatewayToken : "",
       isDirty: !Equal.equals(providerConfig, defaultProviderConfig),
       liveProvider,
       models,
@@ -1310,37 +1348,39 @@ export function GeneralSettingsPanel() {
               >
                 <CollapsibleContent>
                   <div className="space-y-0">
-                    <div className="border-t border-border/60 px-4 py-3 sm:px-5">
-                      <label
-                        htmlFor={`provider-install-${providerCard.provider}-binary-path`}
-                        className="block"
-                      >
-                        <span className="text-xs font-medium text-foreground">
-                          {providerDisplayName} binary path
-                        </span>
-                        <Input
-                          id={`provider-install-${providerCard.provider}-binary-path`}
-                          className="mt-1.5"
-                          value={providerCard.binaryPathValue}
-                          onChange={(event) =>
-                            updateSettings({
-                              providers: {
-                                ...settings.providers,
-                                [providerCard.provider]: {
-                                  ...settings.providers[providerCard.provider],
-                                  binaryPath: event.target.value,
+                    {providerCard.provider !== "openclaw" && providerCard.binaryPlaceholder ? (
+                      <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+                        <label
+                          htmlFor={`provider-install-${providerCard.provider}-binary-path`}
+                          className="block"
+                        >
+                          <span className="text-xs font-medium text-foreground">
+                            {providerDisplayName} binary path
+                          </span>
+                          <Input
+                            id={`provider-install-${providerCard.provider}-binary-path`}
+                            className="mt-1.5"
+                            value={providerCard.binaryPathValue}
+                            onChange={(event) =>
+                              updateSettings({
+                                providers: {
+                                  ...settings.providers,
+                                  [providerCard.provider]: {
+                                    ...settings.providers[providerCard.provider],
+                                    binaryPath: event.target.value,
+                                  },
                                 },
-                              },
-                            })
-                          }
-                          placeholder={providerCard.binaryPlaceholder}
-                          spellCheck={false}
-                        />
-                        <span className="mt-1 block text-xs text-muted-foreground">
-                          {providerCard.binaryDescription}
-                        </span>
-                      </label>
-                    </div>
+                              })
+                            }
+                            placeholder={providerCard.binaryPlaceholder}
+                            spellCheck={false}
+                          />
+                          <span className="mt-1 block text-xs text-muted-foreground">
+                            {providerCard.binaryDescription}
+                          </span>
+                        </label>
+                      </div>
+                    ) : null}
 
                     {providerCard.serverUrlPlaceholder ? (
                       <div className="border-t border-border/60 px-4 py-3 sm:px-5">
@@ -1363,6 +1403,8 @@ export function GeneralSettingsPanel() {
                                     ...settings.providers[providerCard.provider],
                                     ...(providerCard.provider === "opencode"
                                       ? { serverUrl: event.target.value }
+                                      : providerCard.provider === "openclaw"
+                                        ? { gatewayUrl: event.target.value }
                                       : {}),
                                   },
                                 },
@@ -1403,6 +1445,8 @@ export function GeneralSettingsPanel() {
                                     ...settings.providers[providerCard.provider],
                                     ...(providerCard.provider === "opencode"
                                       ? { serverPassword: event.target.value }
+                                      : providerCard.provider === "openclaw"
+                                        ? { gatewayPassword: event.target.value }
                                       : {}),
                                   },
                                 },
@@ -1414,6 +1458,46 @@ export function GeneralSettingsPanel() {
                           {providerCard.serverPasswordDescription ? (
                             <span className="mt-1 block text-xs text-muted-foreground">
                               {providerCard.serverPasswordDescription}
+                            </span>
+                          ) : null}
+                        </label>
+                      </div>
+                    ) : null}
+
+                    {providerCard.serverTokenPlaceholder ? (
+                      <div className="border-t border-border/60 px-4 py-3 sm:px-5">
+                        <label
+                          htmlFor={`provider-install-${providerCard.provider}-server-token`}
+                          className="block"
+                        >
+                          <span className="text-xs font-medium text-foreground">
+                            {providerDisplayName} gateway token
+                          </span>
+                          <Input
+                            id={`provider-install-${providerCard.provider}-server-token`}
+                            className="mt-1.5"
+                            type="password"
+                            autoComplete="off"
+                            value={providerCard.serverTokenValue}
+                            onChange={(event) =>
+                              updateSettings({
+                                providers: {
+                                  ...settings.providers,
+                                  [providerCard.provider]: {
+                                    ...settings.providers[providerCard.provider],
+                                    ...(providerCard.provider === "openclaw"
+                                      ? { gatewayToken: event.target.value }
+                                      : {}),
+                                  },
+                                },
+                              })
+                            }
+                            placeholder={providerCard.serverTokenPlaceholder}
+                            spellCheck={false}
+                          />
+                          {providerCard.serverTokenDescription ? (
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {providerCard.serverTokenDescription}
                             </span>
                           ) : null}
                         </label>

@@ -159,6 +159,12 @@ export function getCustomModelOptionsByProvider(
       "opencode",
       selectedProvider === "opencode" ? selectedModel : undefined,
     ),
+    openclaw: getAppModelOptions(
+      settings,
+      providers,
+      "openclaw",
+      selectedProvider === "openclaw" ? selectedModel : undefined,
+    ),
   };
 }
 
