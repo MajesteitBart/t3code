@@ -1,44 +1,48 @@
 import { randomUUID } from "node:crypto";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 
-import { WebSocketServer } from "ws";
-
-type JsonRpcRequest = {
+type GatewayRequest = {
   readonly id: string;
   readonly method: string;
   readonly params?: unknown;
 };
 
-type JsonRpcNotification = {
-  readonly method: string;
-  readonly params?: unknown;
+type GatewayEvent = {
+  readonly event: string;
+  readonly payload?: unknown;
 };
 
-type JsonRpcResponse = {
-  readonly result?: unknown;
+type GatewayResponse = {
+  readonly payload?: unknown;
   readonly error?: {
-    readonly code: number;
+    readonly code: string;
     readonly message: string;
-    readonly data?: unknown;
+    readonly details?: unknown;
+    readonly retryable?: boolean;
+    readonly retryAfterMs?: number;
   };
-  readonly notifications?: ReadonlyArray<JsonRpcNotification>;
+  readonly events?: ReadonlyArray<GatewayEvent>;
 };
+
+interface MockSocketState {
+  sessionSubscription: boolean;
+  readonly sessionMessageSubscriptions: Set<string>;
+}
 
 export interface MockOpenClawGatewayContext {
-  readonly calls: Array<JsonRpcRequest>;
+  readonly calls: Array<GatewayRequest>;
 }
 
 export interface MockOpenClawGatewayOptions {
+  readonly authScopes?: ReadonlyArray<string>;
   readonly handleRequest?: (
-    request: JsonRpcRequest,
+    request: GatewayRequest,
     context: MockOpenClawGatewayContext,
-  ) => JsonRpcResponse | undefined | Promise<JsonRpcResponse | undefined>;
+  ) => GatewayResponse | undefined | Promise<GatewayResponse | undefined>;
 }
 
 export interface MockOpenClawGatewayServer {
   readonly url: string;
-  readonly calls: Array<JsonRpcRequest>;
+  readonly calls: Array<GatewayRequest>;
   stop(): void;
 }
 
@@ -52,26 +56,74 @@ function trimOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function defaultResponse(request: JsonRpcRequest): JsonRpcResponse {
+function defaultHelloOk(scopes: ReadonlyArray<string>) {
+  return {
+    type: "hello-ok" as const,
+    protocol: 3,
+    server: {
+      version: "2026.4.5",
+      connId: randomUUID(),
+    },
+    features: {
+      methods: [
+        "status",
+        "models.list",
+        "models.authStatus",
+        "sessions.create",
+        "sessions.resolve",
+        "sessions.send",
+        "sessions.abort",
+        "sessions.list",
+        "sessions.preview",
+        "sessions.subscribe",
+        "sessions.messages.subscribe",
+      ],
+      events: ["connect.challenge", "session.message", "sessions.changed", "tick"],
+    },
+    snapshot: {
+      presence: [],
+      health: {},
+      stateVersion: {
+        presence: 1,
+        health: 1,
+      },
+      uptimeMs: 1_000,
+    },
+    auth: {
+      role: "operator",
+      scopes: [...scopes],
+    },
+    policy: {
+      maxPayload: 1_000_000,
+      maxBufferedBytes: 1_000_000,
+      tickIntervalMs: 30_000,
+    },
+  };
+}
+
+function defaultResponse(
+  request: GatewayRequest,
+  socketState: MockSocketState,
+  options: MockOpenClawGatewayOptions,
+): GatewayResponse {
   const params = asRecord(request.params) ?? {};
+  const authScopes = options.authScopes ?? ["operator.admin", "operator.read", "operator.write"];
+
   switch (request.method) {
-    case "auth.authenticate":
+    case "connect":
       return {
-        result: {
-          authenticated: true,
-          label: "Test Gateway User",
-        },
+        payload: defaultHelloOk(authScopes),
       };
     case "status":
       return {
-        result: {
+        payload: {
           version: "2026.4.5",
           account: "Test Gateway User",
         },
       };
     case "models.list":
       return {
-        result: {
+        payload: {
           models: [
             {
               id: "openai-codex/gpt-5.4",
@@ -86,96 +138,117 @@ function defaultResponse(request: JsonRpcRequest): JsonRpcResponse {
           ],
         },
       };
-    case "session.create": {
-      const sessionId = randomUUID();
+    case "sessions.create": {
+      const key = trimOrNull(params.key) ?? `session:${randomUUID()}`;
       return {
-        result: { sessionId },
-        notifications: [
-          { method: "session.started", params: { sessionId } },
-          { method: "session.configured", params: params.modelSelection ?? {} },
-          { method: "session.state.changed", params: { state: "ready" } },
-        ],
+        payload: {
+          ok: true,
+          key,
+          sessionId: randomUUID(),
+        },
+        events: socketState.sessionSubscription
+          ? [
+              {
+                event: "sessions.changed",
+                payload: {
+                  sessionKey: key,
+                  reason: "create",
+                  ts: Date.now(),
+                },
+              },
+            ]
+          : [],
       };
     }
-    case "session.resume": {
-      const sessionId = trimOrNull(params.sessionId) ?? randomUUID();
+    case "sessions.resolve": {
+      const key =
+        trimOrNull(params.key) ?? trimOrNull(params.sessionId) ?? `session:${randomUUID()}`;
       return {
-        result: { sessionId },
-        notifications: [
-          { method: "session.started", params: { sessionId, resumed: true } },
-          { method: "session.state.changed", params: { state: "ready" } },
-        ],
+        payload: {
+          ok: true,
+          key,
+          sessionId: randomUUID(),
+        },
       };
     }
-    case "session.sendTurn": {
-      const turnId = randomUUID();
-      const itemId = `assistant:${turnId}`;
+    case "sessions.subscribe":
+      socketState.sessionSubscription = true;
       return {
-        result: { turnId },
-        notifications: [
-          {
-            method: "turn.started",
-            params: {
-              turnId,
-              model: trimOrNull(asRecord(params.modelSelection)?.model) ?? "openai-codex/gpt-5.4",
-            },
-          },
-          {
-            method: "item.started",
-            params: {
-              turnId,
-              itemId,
-              itemType: "assistant_message",
-              status: "inProgress",
-              title: "Assistant",
-            },
-          },
-          {
-            method: "content.delta",
-            params: {
-              turnId,
-              itemId,
-              streamKind: "assistant_text",
-              delta: "hello from openclaw",
-            },
-          },
-          {
-            method: "item.completed",
-            params: {
-              turnId,
-              itemId,
-              itemType: "assistant_message",
-              status: "completed",
-              title: "Assistant",
-            },
-          },
-          {
-            method: "turn.completed",
-            params: {
-              turnId,
-              state: "completed",
-            },
-          },
-        ],
+        payload: {
+          ok: true,
+        },
+      };
+    case "sessions.messages.subscribe": {
+      const key = trimOrNull(params.key) ?? `session:${randomUUID()}`;
+      socketState.sessionMessageSubscriptions.add(key);
+      return {
+        payload: {
+          ok: true,
+          key,
+        },
       };
     }
-    case "session.interrupt":
+    case "sessions.send": {
+      const key = trimOrNull(params.key) ?? `session:${randomUUID()}`;
+      const runId = trimOrNull(params.idempotencyKey) ?? randomUUID();
+      const responseEvents: Array<GatewayEvent> = [];
+
+      if (socketState.sessionMessageSubscriptions.has(key)) {
+        responseEvents.push({
+          event: "session.message",
+          payload: {
+            sessionKey: key,
+            messageId: `assistant:${runId}`,
+            message: {
+              id: `assistant:${runId}`,
+              role: "assistant",
+              runId,
+              content: [
+                {
+                  type: "text",
+                  text: "hello from openclaw",
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      if (socketState.sessionSubscription) {
+        responseEvents.push({
+          event: "sessions.changed",
+          payload: {
+            sessionKey: key,
+            reason: "send",
+            ts: Date.now(),
+          },
+        });
+      }
+
       return {
-        result: { ok: true },
-        notifications: [{ method: "turn.aborted", params: { reason: "interrupted" } }],
+        payload: {
+          ok: true,
+          runId,
+          status: "accepted",
+        },
+        events: responseEvents,
       };
-    case "session.stop":
+    }
+    case "sessions.abort":
       return {
-        result: { ok: true },
-        notifications: [{ method: "session.exited", params: { reason: "stopped" } }],
+        payload: {
+          ok: true,
+          abortedRunId: trimOrNull(params.runId),
+          status: "aborted",
+        },
       };
     case "approval.respond":
       return {
-        result: { ok: true },
-        notifications: [
+        payload: { ok: true },
+        events: [
           {
-            method: "approval.resolved",
-            params: {
+            event: "approval.resolved",
+            payload: {
               requestId: trimOrNull(params.requestId),
               decision: trimOrNull(params.decision) ?? "accept",
             },
@@ -184,11 +257,11 @@ function defaultResponse(request: JsonRpcRequest): JsonRpcResponse {
       };
     case "user-input.respond":
       return {
-        result: { ok: true },
-        notifications: [
+        payload: { ok: true },
+        events: [
           {
-            method: "user-input.resolved",
-            params: {
+            event: "user-input.resolved",
+            payload: {
               requestId: trimOrNull(params.requestId),
               answers: asRecord(params.answers) ?? {},
             },
@@ -198,20 +271,73 @@ function defaultResponse(request: JsonRpcRequest): JsonRpcResponse {
     default:
       return {
         error: {
-          code: -32601,
+          code: "METHOD_NOT_FOUND",
           message: `Method not found: ${request.method}`,
         },
       };
   }
 }
 
+function sendChallenge(socket: { send(data: string): void }) {
+  socket.send(
+    JSON.stringify({
+      type: "event",
+      event: "connect.challenge",
+      payload: {
+        nonce: randomUUID(),
+        ts: Date.now(),
+      },
+    }),
+  );
+}
+
+function sendResponse(
+  socket: {
+    send(data: string): void;
+  },
+  requestId: string,
+  response: GatewayResponse,
+) {
+  if (response.error) {
+    socket.send(
+      JSON.stringify({
+        type: "res",
+        id: requestId,
+        ok: false,
+        error: response.error,
+      }),
+    );
+    return;
+  }
+
+  socket.send(
+    JSON.stringify({
+      type: "res",
+      id: requestId,
+      ok: true,
+      payload: response.payload ?? null,
+    }),
+  );
+
+  for (const event of response.events ?? []) {
+    socket.send(
+      JSON.stringify({
+        type: "event",
+        event: event.event,
+        payload: event.payload ?? {},
+      }),
+    );
+  }
+}
+
 export async function startMockOpenClawGateway(
   options: MockOpenClawGatewayOptions = {},
 ): Promise<MockOpenClawGatewayServer> {
-  const calls: Array<JsonRpcRequest> = [];
+  const calls: Array<GatewayRequest> = [];
   const context: MockOpenClawGatewayContext = { calls };
 
   if (typeof Bun !== "undefined") {
+    const socketStates = new WeakMap<object, MockSocketState>();
     const server = Bun.serve({
       port: 0,
       fetch(request, bunServer) {
@@ -221,39 +347,36 @@ export async function startMockOpenClawGateway(
         return new Response("not found", { status: 404 });
       },
       websocket: {
-        async message(ws, message) {
-          const request = JSON.parse(String(message)) as JsonRpcRequest;
-          calls.push(request);
+        open(ws: object & { send(data: string): void }) {
+          socketStates.set(ws, {
+            sessionSubscription: false,
+            sessionMessageSubscriptions: new Set(),
+          });
+          sendChallenge(ws);
+        },
+        async message(ws: object & { send(data: string): void }, message: string | Buffer) {
+          const request = JSON.parse(String(message)) as {
+            type: "req";
+            id: string;
+            method: string;
+            params?: unknown;
+          };
+          const normalizedRequest: GatewayRequest = {
+            id: request.id,
+            method: request.method,
+            params: request.params,
+          };
+          calls.push(normalizedRequest);
+          const socketState =
+            socketStates.get(ws) ??
+            ({
+              sessionSubscription: false,
+              sessionMessageSubscriptions: new Set(),
+            } satisfies MockSocketState);
           const response =
-            (await options.handleRequest?.(request, context)) ?? defaultResponse(request);
-
-          if (response.error) {
-            ws.send(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                id: request.id,
-                error: response.error,
-              }),
-            );
-            return;
-          }
-
-          ws.send(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: request.id,
-              result: response.result ?? null,
-            }),
-          );
-          for (const notification of response.notifications ?? []) {
-            ws.send(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                method: notification.method,
-                params: notification.params ?? {},
-              }),
-            );
-          }
+            (await options.handleRequest?.(normalizedRequest, context)) ??
+            defaultResponse(normalizedRequest, socketState, options);
+          sendResponse(ws, request.id, response);
         },
       },
     });
@@ -267,51 +390,61 @@ export async function startMockOpenClawGateway(
     };
   }
 
+  const [{ createServer }, { WebSocketServer }] = await Promise.all([
+    import("node:http"),
+    import("ws"),
+  ]);
+  type NodeWebSocket = import("ws").WebSocket;
+  type NodeWebSocketMessage = import("ws").RawData;
+  const socketStates = new WeakMap<object, MockSocketState>();
   const httpServer = createServer((_request, response) => {
-    response.statusCode = 404;
+    response.writeHead(404, { "content-type": "text/plain" });
     response.end("not found");
   });
-  const webSocketServer = new WebSocketServer({ noServer: true });
+  const wsServer = new WebSocketServer({ server: httpServer });
 
-  webSocketServer.on("connection", (socket) => {
-    socket.on("message", async (message) => {
-      const request = JSON.parse(String(message)) as JsonRpcRequest;
-      calls.push(request);
-      const response = (await options.handleRequest?.(request, context)) ?? defaultResponse(request);
-
-      if (response.error) {
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: request.id,
-            error: response.error,
-          }),
-        );
-        return;
-      }
-
-      socket.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          id: request.id,
-          result: response.result ?? null,
-        }),
-      );
-      for (const notification of response.notifications ?? []) {
-        socket.send(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            method: notification.method,
-            params: notification.params ?? {},
-          }),
-        );
-      }
+  wsServer.on("connection", (socket: NodeWebSocket) => {
+    socketStates.set(socket, {
+      sessionSubscription: false,
+      sessionMessageSubscriptions: new Set(),
     });
-  });
+    sendChallenge({
+      send(data: string) {
+        socket.send(data);
+      },
+    });
 
-  httpServer.on("upgrade", (request, socket, head) => {
-    webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-      webSocketServer.emit("connection", webSocket, request);
+    socket.on("message", async (message: NodeWebSocketMessage) => {
+      const request = JSON.parse(String(message)) as {
+        type: "req";
+        id: string;
+        method: string;
+        params?: unknown;
+      };
+      const normalizedRequest: GatewayRequest = {
+        id: request.id,
+        method: request.method,
+        params: request.params,
+      };
+      calls.push(normalizedRequest);
+      const socketState =
+        socketStates.get(socket) ??
+        ({
+          sessionSubscription: false,
+          sessionMessageSubscriptions: new Set(),
+        } satisfies MockSocketState);
+      const response =
+        (await options.handleRequest?.(normalizedRequest, context)) ??
+        defaultResponse(normalizedRequest, socketState, options);
+      sendResponse(
+        {
+          send(data: string) {
+            socket.send(data);
+          },
+        },
+        request.id,
+        response,
+      );
     });
   });
 
@@ -325,18 +458,18 @@ export async function startMockOpenClawGateway(
 
   const address = httpServer.address();
   if (!address || typeof address === "string") {
-    throw new Error("Failed to determine mock OpenClaw gateway address");
+    throw new Error("Mock OpenClaw gateway failed to bind a TCP port.");
   }
 
   return {
-    url: `ws://127.0.0.1:${(address as AddressInfo).port}`,
+    url: `ws://127.0.0.1:${address.port}`,
     calls,
     stop() {
-      for (const client of webSocketServer.clients) {
+      for (const client of wsServer.clients) {
         client.close();
       }
-      webSocketServer.close();
-      void httpServer.close();
+      wsServer.close();
+      httpServer.close();
     },
   };
 }

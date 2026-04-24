@@ -16,11 +16,15 @@ import {
 import { Effect, Layer, PubSub, Semaphore, Stream } from "effect";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { ProviderAdapterRequestError, ProviderAdapterSessionNotFoundError } from "../Errors.ts";
 import {
-  ProviderAdapterRequestError,
-  ProviderAdapterSessionNotFoundError,
-} from "../Errors.ts";
+  getOpenClawMessageId,
+  getOpenClawMessageRole,
+  getOpenClawMessageRunId,
+  getOpenClawMessageText,
+} from "../openclawMessages.ts";
 import { OpenClawAdapter, type OpenClawAdapterShape } from "../Services/OpenClawAdapter.ts";
 import {
   connectOpenClawGateway,
@@ -30,7 +34,7 @@ import {
 } from "../openclawGateway.ts";
 
 const PROVIDER = "openclaw" as const;
-const OPENCLAW_RESUME_SCHEMA_VERSION = 1 as const;
+const OPENCLAW_RESUME_SCHEMA_VERSION = 2 as const;
 
 interface OpenClawTurnSnapshot {
   readonly id: TurnId;
@@ -40,7 +44,7 @@ interface OpenClawTurnSnapshot {
 interface OpenClawSessionContext {
   session: ProviderSession;
   readonly connection: OpenClawGatewayConnection;
-  readonly sessionId: string;
+  readonly sessionKey: string;
   readonly turns: Array<OpenClawTurnSnapshot>;
   readonly pendingApprovals: Set<string>;
   readonly pendingUserInputs: Set<string>;
@@ -64,30 +68,35 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function parseResumeCursor(
-  value: unknown,
-): {
-  readonly sessionId: string;
+function parseResumeCursor(value: unknown): {
+  readonly sessionKey: string;
 } | null {
   const record = asRecord(value);
-  const sessionId = trimOrNull(record?.sessionId);
-  if (!record || record.schemaVersion !== OPENCLAW_RESUME_SCHEMA_VERSION || !sessionId) {
+  if (!record) {
     return null;
   }
-  return { sessionId };
+
+  const sessionKey = trimOrNull(record.sessionKey);
+  if (record.schemaVersion === OPENCLAW_RESUME_SCHEMA_VERSION && sessionKey) {
+    return { sessionKey };
+  }
+
+  const legacySessionId = trimOrNull(record.sessionId);
+  if (record.schemaVersion === 1 && legacySessionId) {
+    return { sessionKey: legacySessionId };
+  }
+
+  return null;
 }
 
-function sessionResumeCursor(sessionId: string) {
+function sessionResumeCursor(sessionKey: string) {
   return {
     schemaVersion: OPENCLAW_RESUME_SCHEMA_VERSION,
-    sessionId,
+    sessionKey,
   };
 }
 
-function getTurnSnapshot(
-  context: OpenClawSessionContext,
-  turnId: TurnId,
-): OpenClawTurnSnapshot {
+function getTurnSnapshot(context: OpenClawSessionContext, turnId: TurnId): OpenClawTurnSnapshot {
   const existing = context.turns.find((turn) => turn.id === turnId);
   if (existing) {
     return existing;
@@ -306,6 +315,34 @@ function buildEventBase(input: {
   >;
 }
 
+function buildSessionLifecycleEvents(
+  context: OpenClawSessionContext,
+): ReadonlyArray<ProviderRuntimeEvent> {
+  return [
+    {
+      ...buildEventBase({
+        threadId: context.session.threadId,
+      }),
+      type: "session.started",
+      payload: {
+        resume: sessionResumeCursor(context.sessionKey),
+      },
+    },
+    {
+      ...buildEventBase({
+        threadId: context.session.threadId,
+      }),
+      type: "session.configured",
+      payload: {
+        config: {
+          key: context.sessionKey,
+          ...(context.session.model ? { model: context.session.model } : {}),
+        },
+      },
+    },
+  ];
+}
+
 function mapNotificationToEvents(
   context: OpenClawSessionContext,
   notification: OpenClawGatewayNotification,
@@ -329,7 +366,7 @@ function mapNotificationToEvents(
           }),
           type: "session.started",
           payload: {
-            resume: sessionResumeCursor(context.sessionId),
+            resume: sessionResumeCursor(context.sessionKey),
           },
         },
       ];
@@ -402,6 +439,119 @@ function mapNotificationToEvents(
           },
         },
       ];
+    case "session.message": {
+      const message = asRecord(payload.message) ?? payload;
+      const role = getOpenClawMessageRole(message);
+      const messageText = getOpenClawMessageText(message);
+      const messageTurnId = TurnId.make(
+        getOpenClawMessageRunId(message) ??
+          trimOrNull(payload.runId) ??
+          trimOrNull(payload.messageId) ??
+          context.activeTurnId ??
+          `${context.session.threadId}:${randomUUID()}`,
+      );
+      const messageItemId =
+        getOpenClawMessageId(message) ??
+        trimOrNull(payload.messageId) ??
+        `assistant:${messageTurnId}`;
+
+      appendTurnItem(context, messageTurnId, message);
+
+      if (role !== "assistant") {
+        return [];
+      }
+
+      const events: Array<ProviderRuntimeEvent> = [];
+      if (context.activeTurnId !== messageTurnId) {
+        context.activeTurnId = messageTurnId;
+        context.session = {
+          ...context.session,
+          status: "running",
+          activeTurnId: messageTurnId,
+          updatedAt: nowIso(),
+        };
+        events.push({
+          ...buildEventBase({
+            threadId: context.session.threadId,
+            turnId: messageTurnId,
+            raw: notification,
+          }),
+          type: "turn.started",
+          payload: {
+            ...(context.session.model ? { model: context.session.model } : {}),
+          },
+        });
+      }
+
+      events.push({
+        ...buildEventBase({
+          threadId: context.session.threadId,
+          turnId: messageTurnId,
+          itemId: messageItemId,
+          raw: notification,
+        }),
+        type: "item.started",
+        payload: {
+          itemType: "assistant_message",
+          status: "inProgress",
+          title: "Assistant",
+          data: message,
+        },
+      });
+
+      if (messageText.length > 0) {
+        events.push({
+          ...buildEventBase({
+            threadId: context.session.threadId,
+            turnId: messageTurnId,
+            itemId: messageItemId,
+            raw: notification,
+          }),
+          type: "content.delta",
+          payload: {
+            streamKind: "assistant_text",
+            delta: messageText,
+          },
+        });
+      }
+
+      events.push({
+        ...buildEventBase({
+          threadId: context.session.threadId,
+          turnId: messageTurnId,
+          itemId: messageItemId,
+          raw: notification,
+        }),
+        type: "item.completed",
+        payload: {
+          itemType: "assistant_message",
+          status: "completed",
+          title: "Assistant",
+          data: message,
+        },
+      });
+
+      context.activeTurnId = undefined;
+      context.session = {
+        ...context.session,
+        status: "ready",
+        activeTurnId: undefined,
+        updatedAt: nowIso(),
+      };
+      events.push({
+        ...buildEventBase({
+          threadId: context.session.threadId,
+          turnId: messageTurnId,
+          raw: notification,
+        }),
+        type: "turn.completed",
+        payload: {
+          state: "completed",
+        },
+      });
+
+      return events;
+    }
     case "turn.started":
       context.activeTurnId = turnId;
       context.session = {
@@ -481,6 +631,7 @@ function mapNotificationToEvents(
         },
       ];
     case "thread.token-usage.updated":
+      const usageRecord = asRecord(payload.usage);
       return [
         {
           ...buildEventBase({
@@ -490,11 +641,12 @@ function mapNotificationToEvents(
           }),
           type: "thread.token-usage.updated",
           payload: {
-            usage:
-              asRecord(payload.usage) ??
-              ({
-                usedTokens: 0,
-              } as const),
+            usage: {
+              usedTokens:
+                typeof usageRecord?.usedTokens === "number"
+                  ? Math.max(0, Math.floor(usageRecord.usedTokens))
+                  : 0,
+            },
           },
         },
       ];
@@ -697,7 +849,9 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
   Layer.effect(
     OpenClawAdapter,
     Effect.gen(function* () {
+      const serverConfig = yield* ServerConfig;
       const serverSettings = yield* ServerSettingsService;
+      const layerScope = yield* Effect.scope;
       const runtimeEvents = yield* Effect.acquireRelease(
         PubSub.unbounded<ProviderRuntimeEvent>(),
         PubSub.shutdown,
@@ -713,7 +867,9 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
       const getContext = (threadId: ThreadId) => {
         const context = sessions.get(threadId);
         if (!context) {
-          return Effect.fail(new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }));
+          return Effect.fail(
+            new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }),
+          );
         }
         return Effect.succeed(context);
       };
@@ -765,7 +921,7 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
               );
             }
           }
-        }).pipe(Effect.forkScoped);
+        }).pipe(Effect.forkIn(layerScope));
 
       const adapter: OpenClawAdapterShape = {
         provider: PROVIDER,
@@ -775,8 +931,16 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
         startSession: (input) =>
           mutationSemaphore.withPermit(
             Effect.gen(function* () {
-              const settings = yield* serverSettings.getSettings;
-              const providerSettings = settings.providers.openclaw;
+              const providerSettings = yield* serverSettings.getSettings.pipe(
+                Effect.map((settings) => settings.providers.openclaw),
+                Effect.orElseSucceed(() => ({
+                  enabled: true,
+                  gatewayUrl: "",
+                  gatewayToken: "",
+                  gatewayPassword: "",
+                  customModels: [],
+                })),
+              );
               const existing = sessions.get(input.threadId);
               if (existing) {
                 yield* stopContext(existing);
@@ -789,35 +953,42 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
                   token: providerSettings.gatewayToken,
                   password: providerSettings.gatewayPassword,
                 }),
-              ).pipe(Effect.mapError((error) => toRequestError("auth.authenticate", error)));
+              ).pipe(Effect.mapError((error) => toRequestError("connect", error)));
 
-              const sessionPayload = {
-                threadId: input.threadId,
-                cwd: trimOrNull(input.cwd) ?? undefined,
-                runtimeMode: input.runtimeMode,
-                ...(input.modelSelection
-                  ? {
-                      modelSelection: {
-                        model: input.modelSelection.model,
-                        ...(input.modelSelection.options
-                          ? { options: input.modelSelection.options }
-                          : {}),
-                      },
-                    }
-                  : {}),
-                ...(input.approvalPolicy ? { approvalPolicy: input.approvalPolicy } : {}),
-                ...(input.sandboxMode ? { sandboxMode: input.sandboxMode } : {}),
-              };
-              const method = resumed ? "session.resume" : "session.create";
               const result = yield* Effect.promise(() =>
-                connection.call(method, resumed ? { sessionId: resumed.sessionId, ...sessionPayload } : sessionPayload),
-              ).pipe(Effect.mapError((error) => toRequestError(method, error)));
+                resumed
+                  ? connection.call("sessions.resolve", {
+                      key: resumed.sessionKey,
+                      sessionId: resumed.sessionKey,
+                    })
+                  : connection.call("sessions.create", {
+                      key: String(input.threadId),
+                      label: String(input.threadId),
+                      ...(input.modelSelection?.model ? { model: input.modelSelection.model } : {}),
+                    }),
+              ).pipe(
+                Effect.mapError((error) =>
+                  toRequestError(resumed ? "sessions.resolve" : "sessions.create", error),
+                ),
+              );
               const resultRecord = asRecord(result) ?? {};
-              const sessionId =
-                trimOrNull(resultRecord.sessionId) ??
-                trimOrNull(resultRecord.id) ??
-                resumed?.sessionId ??
-                randomUUID();
+              const sessionKey =
+                trimOrNull(resultRecord.key) ??
+                trimOrNull(resultRecord.sessionKey) ??
+                resumed?.sessionKey ??
+                String(input.threadId);
+
+              yield* Effect.promise(() => connection.call("sessions.subscribe", {})).pipe(
+                Effect.mapError((error) => toRequestError("sessions.subscribe", error)),
+              );
+              yield* Effect.promise(() =>
+                connection.call("sessions.messages.subscribe", {
+                  key: sessionKey,
+                }),
+              ).pipe(
+                Effect.mapError((error) => toRequestError("sessions.messages.subscribe", error)),
+              );
+
               const now = nowIso();
               const session: ProviderSession = {
                 provider: PROVIDER,
@@ -826,14 +997,14 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
                 ...(trimOrNull(input.cwd) ? { cwd: trimOrNull(input.cwd)! } : {}),
                 ...(input.modelSelection?.model ? { model: input.modelSelection.model } : {}),
                 threadId: input.threadId,
-                resumeCursor: sessionResumeCursor(sessionId),
+                resumeCursor: sessionResumeCursor(sessionKey),
                 createdAt: now,
                 updatedAt: now,
               };
               const context: OpenClawSessionContext = {
                 session,
                 connection,
-                sessionId,
+                sessionKey,
                 turns: [],
                 pendingApprovals: new Set(),
                 pendingUserInputs: new Set(),
@@ -842,6 +1013,7 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
               };
               sessions.set(input.threadId, context);
               yield* startNotificationLoop(context);
+              yield* publishEvents(buildSessionLifecycleEvents(context));
               return session;
             }),
           ),
@@ -849,45 +1021,37 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
           mutationSemaphore.withPermit(
             Effect.gen(function* () {
               const context = yield* getContext(input.threadId);
-              const attachments = yield* Effect.forEach(
-                input.attachments ?? [],
-                (attachment) =>
-                  Effect.gen(function* () {
-                    const path = yield* resolveAttachmentPath(attachment.id).pipe(
-                      Effect.orElseSucceed(() => undefined),
-                    );
-                    return {
-                      id: attachment.id,
-                      name: attachment.name,
-                      mimeType: attachment.mimeType,
-                      sizeBytes: attachment.sizeBytes,
-                      ...(path ? { path } : {}),
-                    };
-                  }),
-              );
-              const result = yield* Effect.promise(() =>
-                context.connection.call("session.sendTurn", {
-                  sessionId: context.sessionId,
-                  ...(trimOrNull(input.input) ? { input: trimOrNull(input.input)! } : {}),
-                  ...(attachments.length > 0 ? { attachments } : {}),
-                  ...(input.modelSelection
-                    ? {
-                        modelSelection: {
-                          model: input.modelSelection.model,
-                          ...(input.modelSelection.options
-                            ? { options: input.modelSelection.options }
-                            : {}),
-                        },
-                      }
-                    : {}),
-                  ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+              const attachments = yield* Effect.forEach(input.attachments ?? [], (attachment) =>
+                Effect.gen(function* () {
+                  const path =
+                    resolveAttachmentPath({
+                      attachmentsDir: serverConfig.attachmentsDir,
+                      attachment,
+                    }) ?? undefined;
+                  return {
+                    id: attachment.id,
+                    name: attachment.name,
+                    mimeType: attachment.mimeType,
+                    sizeBytes: attachment.sizeBytes,
+                    ...(path ? { path } : {}),
+                  };
                 }),
-              ).pipe(Effect.mapError((error) => toRequestError("session.sendTurn", error)));
+              );
+              const requestedTurnId = TurnId.make(`${input.threadId}:${randomUUID()}`);
+              const result = yield* Effect.promise(() =>
+                context.connection.call("sessions.send", {
+                  key: context.sessionKey,
+                  message: trimOrNull(input.input) ?? "",
+                  ...(attachments.length > 0 ? { attachments } : {}),
+                  idempotencyKey: requestedTurnId,
+                }),
+              ).pipe(Effect.mapError((error) => toRequestError("sessions.send", error)));
               const resultRecord = asRecord(result) ?? {};
               const turnId = TurnId.make(
-                trimOrNull(resultRecord.turnId) ??
+                trimOrNull(resultRecord.runId) ??
+                  trimOrNull(resultRecord.turnId) ??
                   trimOrNull(resultRecord.id) ??
-                  `${input.threadId}:${randomUUID()}`,
+                  requestedTurnId,
               );
               context.activeTurnId = turnId;
               context.session = {
@@ -897,10 +1061,22 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
                 updatedAt: nowIso(),
                 ...(input.modelSelection?.model ? { model: input.modelSelection.model } : {}),
               };
+              yield* publishEvents([
+                {
+                  ...buildEventBase({
+                    threadId: context.session.threadId,
+                    turnId,
+                  }),
+                  type: "turn.started",
+                  payload: {
+                    ...(context.session.model ? { model: context.session.model } : {}),
+                  },
+                },
+              ]);
               return {
                 threadId: input.threadId,
                 turnId,
-                resumeCursor: sessionResumeCursor(context.sessionId),
+                resumeCursor: sessionResumeCursor(context.sessionKey),
               };
             }),
           ),
@@ -909,11 +1085,11 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
             Effect.gen(function* () {
               const context = yield* getContext(threadId);
               yield* Effect.promise(() =>
-                context.connection.call("session.interrupt", {
-                  sessionId: context.sessionId,
-                  ...(turnId ? { turnId } : {}),
+                context.connection.call("sessions.abort", {
+                  key: context.sessionKey,
+                  ...(turnId ? { runId: turnId } : {}),
                 }),
-              ).pipe(Effect.mapError((error) => toRequestError("session.interrupt", error)));
+              ).pipe(Effect.mapError((error) => toRequestError("sessions.abort", error)));
             }),
           ),
         respondToRequest: (threadId, requestId, decision) =>
@@ -922,7 +1098,7 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
               const context = yield* getContext(threadId);
               yield* Effect.promise(() =>
                 context.connection.call("approval.respond", {
-                  sessionId: context.sessionId,
+                  sessionId: context.sessionKey,
                   requestId,
                   decision,
                 }),
@@ -936,7 +1112,7 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
               const context = yield* getContext(threadId);
               yield* Effect.promise(() =>
                 context.connection.call("user-input.respond", {
-                  sessionId: context.sessionId,
+                  sessionId: context.sessionKey,
                   requestId,
                   answers,
                 }),
@@ -948,14 +1124,17 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
           mutationSemaphore.withPermit(
             Effect.gen(function* () {
               const context = yield* getContext(threadId);
-              yield* Effect.promise(() =>
-                context.connection.call("session.stop", {
-                  sessionId: context.sessionId,
-                }),
-              ).pipe(
-                Effect.mapError((error) => toRequestError("session.stop", error)),
-                Effect.ignore,
-              );
+              if (context.activeTurnId) {
+                yield* Effect.promise(() =>
+                  context.connection.call("sessions.abort", {
+                    key: context.sessionKey,
+                    runId: context.activeTurnId,
+                  }),
+                ).pipe(
+                  Effect.mapError((error) => toRequestError("sessions.abort", error)),
+                  Effect.ignore,
+                );
+              }
               yield* stopContext(context);
             }),
           ),
@@ -982,11 +1161,9 @@ export const makeOpenClawAdapterLive = (_options?: OpenClawAdapterLiveOptions) =
             if (numTurns === 0) {
               return yield* adapter.readThread(threadId);
             }
-            return yield* Effect.fail(
-              toRequestError(
-                "session.rollback",
-                new Error("OpenClaw gateway rollback is not implemented."),
-              ),
+            return yield* toRequestError(
+              "session.rollback",
+              new Error("OpenClaw gateway rollback is not implemented."),
             );
           }),
         stopAll: () =>

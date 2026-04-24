@@ -6,6 +6,7 @@ import { TextGenerationError, type ChatAttachment } from "@t3tools/contracts";
 import { sanitizeFeatureBranchName } from "@t3tools/shared/git";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
+import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   buildBranchNamePrompt,
@@ -25,6 +26,7 @@ import {
   getOpenClawGatewayErrorMessage,
   type OpenClawGatewayNotification,
 } from "../../provider/openclawGateway.ts";
+import { getOpenClawMessageRole, getOpenClawMessageText } from "../../provider/openclawMessages.ts";
 
 const OPENCLAW_TEXT_GENERATION_TIMEOUT_MS = 60_000;
 
@@ -57,30 +59,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-async function resolveAttachmentPayload(
-  attachments: ReadonlyArray<ChatAttachment> | undefined,
-): Promise<ReadonlyArray<Record<string, unknown>>> {
-  if (!attachments || attachments.length === 0) {
-    return [];
-  }
-
-  const entries = await Promise.all(
-    attachments.map(async (attachment) => {
-      const path = await Effect.runPromise(
-        resolveAttachmentPath(attachment.id).pipe(Effect.orElseSucceed(() => undefined)),
-      );
-      return {
-        id: attachment.id,
-        name: attachment.name,
-        mimeType: attachment.mimeType,
-        sizeBytes: attachment.sizeBytes,
-        ...(path ? { path } : {}),
-      };
-    }),
-  );
-  return entries;
-}
-
 async function collectAssistantText(input: {
   readonly notifications: AsyncIterable<OpenClawGatewayNotification>;
   readonly fallbackResult: unknown;
@@ -103,6 +81,14 @@ async function collectAssistantText(input: {
           assistantText += typeof payload.delta === "string" ? payload.delta : "";
           continue;
         }
+        if (notification.method === "session.message") {
+          const message = asRecord(payload.message) ?? payload;
+          if (getOpenClawMessageRole(message) === "assistant") {
+            assistantText += getOpenClawMessageText(message);
+            break;
+          }
+          continue;
+        }
         if (notification.method === "runtime.error") {
           throw new Error(trimOrNull(payload.message) ?? "OpenClaw text generation failed.");
         }
@@ -116,7 +102,10 @@ async function collectAssistantText(input: {
       }
     })(),
     new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error("OpenClaw text generation timed out.")), OPENCLAW_TEXT_GENERATION_TIMEOUT_MS),
+      setTimeout(
+        () => reject(new Error("OpenClaw text generation timed out.")),
+        OPENCLAW_TEXT_GENERATION_TIMEOUT_MS,
+      ),
     ),
   ]);
 
@@ -124,6 +113,7 @@ async function collectAssistantText(input: {
 }
 
 const makeOpenClawTextGeneration = Effect.gen(function* () {
+  const serverConfig = yield* ServerConfig;
   const serverSettings = yield* ServerSettingsService;
 
   const runPrompt = Effect.fn("runPrompt")(function* (input: {
@@ -136,42 +126,63 @@ const makeOpenClawTextGeneration = Effect.gen(function* () {
     readonly model: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
   }) {
-    const settings = yield* serverSettings.getSettings;
-    const providerSettings = settings.providers.openclaw;
-    const attachments = yield* Effect.promise(() => resolveAttachmentPayload(input.attachments));
+    const settings = yield* serverSettings.getSettings.pipe(
+      Effect.map((value) => value.providers.openclaw),
+      Effect.orElseSucceed(() => ({
+        enabled: true,
+        gatewayUrl: "",
+        gatewayToken: "",
+        gatewayPassword: "",
+        customModels: [],
+      })),
+    );
+    const attachments = Array.isArray(input.attachments)
+      ? input.attachments.map((attachment) => ({
+          id: attachment.id,
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+          ...(() => {
+            const path = resolveAttachmentPath({
+              attachmentsDir: serverConfig.attachmentsDir,
+              attachment,
+            });
+            return path ? { path } : {};
+          })(),
+        }))
+      : [];
 
     return yield* Effect.acquireUseRelease(
       Effect.promise(() =>
         connectOpenClawGateway({
-          url: providerSettings.gatewayUrl,
-          token: providerSettings.gatewayToken,
-          password: providerSettings.gatewayPassword,
+          url: settings.gatewayUrl,
+          token: settings.gatewayToken,
+          password: settings.gatewayPassword,
         }),
       ),
       (connection) =>
         Effect.tryPromise({
           try: async () => {
-            const sessionResult = await connection.call("session.create", {
-              sessionLabel: `t3-git-${input.operation}-${randomUUID()}`,
-              runtimeMode: "full-access",
-              modelSelection: {
-                model: input.model,
-              },
+            const sessionResult = await connection.call("sessions.create", {
+              label: `t3-git-${input.operation}-${randomUUID()}`,
+              model: input.model,
             });
-            const sessionId =
-              trimOrNull(asRecord(sessionResult)?.sessionId) ??
-              trimOrNull(asRecord(sessionResult)?.id) ??
+            const sessionKey =
+              trimOrNull(asRecord(sessionResult)?.key) ??
+              trimOrNull(asRecord(sessionResult)?.sessionKey) ??
               randomUUID();
-            const sendResult = await connection.call("session.sendTurn", {
-              sessionId,
-              input: input.prompt,
+            await connection.call("sessions.messages.subscribe", {
+              key: sessionKey,
+            });
+            const sendResult = await connection.call("sessions.send", {
+              key: sessionKey,
+              message: input.prompt,
               ...(attachments.length > 0 ? { attachments } : {}),
             });
             const text = await collectAssistantText({
               notifications: connection.notifications,
               fallbackResult: sendResult,
             });
-            await connection.call("session.stop", { sessionId }).catch(() => undefined);
             return text;
           },
           catch: (error) =>
@@ -187,7 +198,7 @@ const makeOpenClawTextGeneration = Effect.gen(function* () {
 
   const decodeJson = <T>(schema: Schema.Schema<T>, raw: string, operation: string): T => {
     try {
-      return Schema.decodeUnknownSync(schema)(JSON.parse(extractJsonObject(raw)));
+      return Schema.decodeUnknownSync(schema as never)(JSON.parse(extractJsonObject(raw))) as T;
     } catch (error) {
       throw new TextGenerationError({
         operation,
@@ -197,60 +208,103 @@ const makeOpenClawTextGeneration = Effect.gen(function* () {
     }
   };
 
+  const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = Effect.fn(
+    "OpenClawTextGeneration.generateCommitMessage",
+  )(function* (input) {
+    const { prompt } = buildCommitMessagePrompt({
+      branch: input.branch,
+      stagedSummary: input.stagedSummary,
+      stagedPatch: input.stagedPatch,
+      includeBranch: input.includeBranch === true,
+    });
+
+    const raw = yield* runPrompt({
+      operation: "generateCommitMessage",
+      prompt,
+      model: input.modelSelection.model,
+    });
+    const result = decodeJson(CommitMessageResponse, raw, "generateCommitMessage");
+    const branch = trimOrNull(result.branch);
+
+    return {
+      subject: sanitizeCommitSubject(result.subject),
+      body: result.body.trim(),
+      ...(branch ? { branch: branch.trim() } : {}),
+    };
+  });
+
+  const generatePrContent: TextGenerationShape["generatePrContent"] = Effect.fn(
+    "OpenClawTextGeneration.generatePrContent",
+  )(function* (input) {
+    const { prompt } = buildPrContentPrompt({
+      baseBranch: input.baseBranch,
+      headBranch: input.headBranch,
+      commitSummary: input.commitSummary,
+      diffSummary: input.diffSummary,
+      diffPatch: input.diffPatch,
+    });
+
+    const raw = yield* runPrompt({
+      operation: "generatePrContent",
+      prompt,
+      model: input.modelSelection.model,
+    });
+    const result = decodeJson(PrContentResponse, raw, "generatePrContent");
+
+    return {
+      title: sanitizePrTitle(result.title),
+      body: result.body.trim(),
+    };
+  });
+
+  const generateBranchName: TextGenerationShape["generateBranchName"] = Effect.fn(
+    "OpenClawTextGeneration.generateBranchName",
+  )(function* (input) {
+    const { prompt } = buildBranchNamePrompt({
+      message: input.message,
+      attachments: input.attachments,
+    });
+
+    const raw = yield* runPrompt({
+      operation: "generateBranchName",
+      prompt,
+      model: input.modelSelection.model,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
+    });
+    const result = decodeJson(BranchNameResponse, raw, "generateBranchName");
+
+    return {
+      branch: sanitizeFeatureBranchName(result.branch),
+    };
+  });
+
+  const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
+    "OpenClawTextGeneration.generateThreadTitle",
+  )(function* (input) {
+    const { prompt } = buildThreadTitlePrompt({
+      message: input.message,
+      attachments: input.attachments,
+    });
+
+    const raw = yield* runPrompt({
+      operation: "generateThreadTitle",
+      prompt,
+      model: input.modelSelection.model,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
+    });
+    const result = decodeJson(ThreadTitleResponse, raw, "generateThreadTitle");
+
+    return {
+      title: sanitizeThreadTitle(result.title),
+    };
+  });
+
   return {
-    generateCommitMessage: (input) =>
-      runPrompt({
-        operation: "generateCommitMessage",
-        prompt: buildCommitMessagePrompt(input),
-        model: input.modelSelection.model,
-      }).pipe(
-        Effect.map((raw) => decodeJson(CommitMessageResponse, raw, "generateCommitMessage")),
-        Effect.map((result) => ({
-          subject: sanitizeCommitSubject(result.subject),
-          body: result.body.trim(),
-          ...(trimOrNull(result.branch) ? { branch: result.branch.trim() } : {}),
-        })),
-      ),
-    generatePrContent: (input) =>
-      runPrompt({
-        operation: "generatePrContent",
-        prompt: buildPrContentPrompt(input),
-        model: input.modelSelection.model,
-      }).pipe(
-        Effect.map((raw) => decodeJson(PrContentResponse, raw, "generatePrContent")),
-        Effect.map((result) => ({
-          title: sanitizePrTitle(result.title),
-          body: result.body.trim(),
-        })),
-      ),
-    generateBranchName: (input) =>
-      runPrompt({
-        operation: "generateBranchName",
-        prompt: buildBranchNamePrompt(input),
-        model: input.modelSelection.model,
-        attachments: input.attachments,
-      }).pipe(
-        Effect.map((raw) => decodeJson(BranchNameResponse, raw, "generateBranchName")),
-        Effect.map((result) => ({
-          branch: sanitizeFeatureBranchName(result.branch),
-        })),
-      ),
-    generateThreadTitle: (input) =>
-      runPrompt({
-        operation: "generateThreadTitle",
-        prompt: buildThreadTitlePrompt(input),
-        model: input.modelSelection.model,
-        attachments: input.attachments,
-      }).pipe(
-        Effect.map((raw) => decodeJson(ThreadTitleResponse, raw, "generateThreadTitle")),
-        Effect.map((result) => ({
-          title: sanitizeThreadTitle(result.title),
-        })),
-      ),
+    generateCommitMessage,
+    generatePrContent,
+    generateBranchName,
+    generateThreadTitle,
   } satisfies TextGenerationShape;
 });
 
-export const OpenClawTextGenerationLive = Layer.effect(
-  TextGeneration,
-  makeOpenClawTextGeneration,
-);
+export const OpenClawTextGenerationLive = Layer.effect(TextGeneration, makeOpenClawTextGeneration);

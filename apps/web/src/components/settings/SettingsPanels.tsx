@@ -1405,7 +1405,7 @@ export function GeneralSettingsPanel() {
                                       ? { serverUrl: event.target.value }
                                       : providerCard.provider === "openclaw"
                                         ? { gatewayUrl: event.target.value }
-                                      : {}),
+                                        : {}),
                                   },
                                 },
                               })
@@ -1447,7 +1447,7 @@ export function GeneralSettingsPanel() {
                                       ? { serverPassword: event.target.value }
                                       : providerCard.provider === "openclaw"
                                         ? { gatewayPassword: event.target.value }
-                                      : {}),
+                                        : {}),
                                   },
                                 },
                               })

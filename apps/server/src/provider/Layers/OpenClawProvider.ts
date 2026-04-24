@@ -13,6 +13,7 @@ import {
 } from "../providerSnapshot.ts";
 import { OpenClawProvider } from "../Services/OpenClawProvider.ts";
 import {
+  classifyOpenClawGatewayError,
   connectOpenClawGateway,
   DEFAULT_OPENCLAW_GATEWAY_URL,
   getOpenClawGatewayErrorMessage,
@@ -30,6 +31,29 @@ class OpenClawProbeError extends Data.TaggedError("OpenClawProbeError")<{
   readonly detail: string;
   readonly cause: unknown;
 }> {}
+
+function parseOpenClawScopes(value: unknown): ReadonlyArray<string> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .map((entry) => nonEmptyTrimmed(typeof entry === "string" ? entry : undefined))
+        .filter((entry): entry is string => entry !== null),
+    ),
+  );
+}
+
+function hasOpenClawReadScope(scopes: ReadonlyArray<string>): boolean {
+  const scopeSet = new Set(scopes);
+  return (
+    scopeSet.has("operator.admin") ||
+    scopeSet.has("operator.write") ||
+    scopeSet.has("operator.read")
+  );
+}
 
 function parseOpenClawVersion(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") {
@@ -138,51 +162,58 @@ function formatOpenClawProbeError(input: {
   readonly error: unknown;
   readonly gatewayUrl: string;
 }): ProviderProbeResult {
-  const detail =
-    input.error instanceof OpenClawProbeError
-      ? input.error.detail
-      : getOpenClawGatewayErrorMessage(input.error, "OpenClaw gateway probe failed.");
-  const lower = detail.toLowerCase();
+  const cause = input.error instanceof OpenClawProbeError ? input.error.cause : input.error;
+  const classified = classifyOpenClawGatewayError(cause);
 
-  if (
-    lower.includes("401") ||
-    lower.includes("403") ||
-    lower.includes("unauthorized") ||
-    lower.includes("forbidden") ||
-    lower.includes("auth")
-  ) {
-    return {
-      installed: true,
-      version: null,
-      status: "error",
-      auth: { status: "unauthenticated" },
-      message: "OpenClaw gateway rejected authentication. Check the configured token or password.",
-    };
+  switch (classified.kind) {
+    case "auth":
+      return {
+        installed: true,
+        version: null,
+        status: "error",
+        auth: { status: "unauthenticated" },
+        message:
+          "OpenClaw gateway rejected authentication. Check the configured token or password.",
+      };
+    case "pairing":
+      return {
+        installed: true,
+        version: null,
+        status: "error",
+        auth: { status: "unknown" },
+        message:
+          classified.detailCode === "DEVICE_IDENTITY_REQUIRED"
+            ? "OpenClaw gateway requires a paired device identity for T3 Code. Re-pair this client or update the configured token."
+            : "OpenClaw gateway requires device pairing or approval for T3 Code before it can connect.",
+      };
+    case "missing_scope":
+      return {
+        installed: true,
+        version: null,
+        status: "warning",
+        auth: { status: "authenticated" },
+        message: `Connected to the OpenClaw gateway, but the current credentials are missing ${classified.missingScope ?? "operator.read"}.`,
+      };
+    case "connection":
+      return {
+        installed: true,
+        version: null,
+        status: "error",
+        auth: { status: "unknown" },
+        message: `Couldn't reach the configured OpenClaw gateway at ${input.gatewayUrl}.`,
+      };
+    default:
+      return {
+        installed: true,
+        version: null,
+        status: "error",
+        auth: { status: "unknown" },
+        message:
+          input.error instanceof OpenClawProbeError
+            ? input.error.detail
+            : getOpenClawGatewayErrorMessage(input.error, "OpenClaw gateway probe failed."),
+      };
   }
-
-  if (
-    lower.includes("connect") ||
-    lower.includes("econnrefused") ||
-    lower.includes("enotfound") ||
-    lower.includes("timeout") ||
-    lower.includes("timed out")
-  ) {
-    return {
-      installed: true,
-      version: null,
-      status: "error",
-      auth: { status: "unknown" },
-      message: `Couldn't reach the configured OpenClaw gateway at ${input.gatewayUrl}.`,
-    };
-  }
-
-  return {
-    installed: true,
-    version: null,
-    status: "error",
-    auth: { status: "unknown" },
-    message: detail,
-  };
 }
 
 function makePendingOpenClawProvider(settings: OpenClawSettings): ServerProvider {
@@ -246,29 +277,38 @@ const checkOpenClawProviderStatus = Effect.fn("checkOpenClawProviderStatus")(fun
       });
 
       try {
-        const [statusPayload, modelsPayload] = await Promise.allSettled([
+        const grantedScopes = parseOpenClawScopes(connection.hello.auth?.scopes);
+        if (!hasOpenClawReadScope(grantedScopes)) {
+          return {
+            version: nonEmptyTrimmed(connection.hello.server?.version) ?? null,
+            authLabel: undefined,
+            builtInModels: [],
+            status: "warning" as const,
+            statusMessage:
+              "Connected to the OpenClaw gateway, but the current credentials do not include operator.read.",
+          };
+        }
+
+        const [statusPayload, modelsPayload] = await Promise.all([
           connection.call("status"),
           connection.call("models.list"),
         ]);
         const version =
-          statusPayload.status === "fulfilled" ? parseOpenClawVersion(statusPayload.value) : null;
-        const authLabel =
-          statusPayload.status === "fulfilled"
-            ? parseOpenClawAuthLabel(statusPayload.value)
-            : undefined;
-        const builtInModels =
-          modelsPayload.status === "fulfilled" ? parseOpenClawModels(modelsPayload.value) : [];
+          parseOpenClawVersion(statusPayload) ??
+          nonEmptyTrimmed(connection.hello.server?.version) ??
+          null;
+        const authLabel = parseOpenClawAuthLabel(statusPayload);
+        const builtInModels = parseOpenClawModels(modelsPayload);
         const statusMessage =
-          modelsPayload.status === "rejected"
-            ? "Connected to the OpenClaw gateway, but model discovery failed. Add custom models if needed."
-            : builtInModels.length === 0
-              ? "Connected to the OpenClaw gateway. No models were reported yet."
-              : undefined;
+          builtInModels.length === 0
+            ? "Connected to the OpenClaw gateway. No models were reported yet."
+            : undefined;
 
         return {
           version,
           authLabel,
           builtInModels,
+          status: "ready" as const,
           ...(statusMessage ? { statusMessage } : {}),
         };
       } finally {
@@ -318,7 +358,7 @@ const checkOpenClawProviderStatus = Effect.fn("checkOpenClawProviderStatus")(fun
     probe: {
       installed: true,
       version: probe.version,
-      status: "ready",
+      status: probe.status,
       auth: {
         status: "authenticated",
         ...(probe.authLabel ? { label: probe.authLabel } : {}),
@@ -335,6 +375,13 @@ export const OpenClawProviderLive = Layer.effect(
 
     const getSettings = serverSettings.getSettings.pipe(
       Effect.map((settings) => settings.providers.openclaw),
+      Effect.orElseSucceed(() => ({
+        enabled: true,
+        gatewayUrl: DEFAULT_OPENCLAW_GATEWAY_URL,
+        gatewayToken: "",
+        gatewayPassword: "",
+        customModels: [],
+      })),
     );
     const streamSettings = serverSettings.streamChanges.pipe(
       Stream.map((settings) => settings.providers.openclaw),

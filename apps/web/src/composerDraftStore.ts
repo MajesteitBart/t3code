@@ -736,13 +736,7 @@ function legacyToModelSelectionByProvider(
 ): Partial<Record<ProviderKind, ModelSelection>> {
   const result: Partial<Record<ProviderKind, ModelSelection>> = {};
   if (modelOptions) {
-    for (const provider of [
-      "codex",
-      "claudeAgent",
-      "cursor",
-      "opencode",
-      "openclaw",
-    ] as const) {
+    for (const provider of ["codex", "claudeAgent", "cursor", "opencode", "openclaw"] as const) {
       const options = modelOptions[provider];
       if (options && options.length > 0) {
         result[provider] = createModelSelection(
