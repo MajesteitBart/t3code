@@ -23,7 +23,11 @@ export default defineConfig({
   fmt: {
     ignorePatterns: [
       ".reference",
+      ".agents/**",
+      ".codex/**",
+      ".delano/**",
       ".repos/**",
+      ".project/**",
       ".plans",
       ".alchemy",
       "dist",
@@ -51,8 +55,12 @@ export default defineConfig({
   },
   lint: {
     ignorePatterns: [
+      ".agents/**",
+      ".codex/**",
+      ".delano/**",
       ".repos",
       ".repos/**",
+      ".project/**",
       "dist",
       "dist-electron",
       "node_modules",
