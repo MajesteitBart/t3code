@@ -1,4 +1,4 @@
-import type { ServerProviderSkill } from "@t3tools/contracts";
+import type { ServerProvider, ServerProviderSkill } from "@t3tools/contracts";
 import {
   insertRankedSearchResult,
   normalizeSearchQuery,
@@ -6,6 +6,33 @@ import {
 } from "@t3tools/shared/searchRanking";
 
 import { formatProviderSkillDisplayName } from "./providerSkillPresentation";
+
+export function hasEnabledProviderSkills(skills: ReadonlyArray<ServerProviderSkill>): boolean {
+  return skills.some((skill) => skill.enabled);
+}
+
+function dedupeEnabledSkills(skills: ReadonlyArray<ServerProviderSkill>): ServerProviderSkill[] {
+  const byName = new Map<string, ServerProviderSkill>();
+  for (const skill of skills) {
+    if (!skill.enabled || byName.has(skill.name)) {
+      continue;
+    }
+    byName.set(skill.name, skill);
+  }
+  return [...byName.values()];
+}
+
+export function resolveComposerProviderSkills(input: {
+  readonly selectedProviderStatus: ServerProvider | null | undefined;
+  readonly providerStatuses: ReadonlyArray<ServerProvider>;
+}): ServerProviderSkill[] {
+  const selectedSkills = input.selectedProviderStatus?.skills ?? [];
+  if (hasEnabledProviderSkills(selectedSkills)) {
+    return [...selectedSkills];
+  }
+
+  return dedupeEnabledSkills(input.providerStatuses.flatMap((provider) => provider.skills));
+}
 
 function scoreProviderSkill(skill: ServerProviderSkill, query: string): number | null {
   const normalizedName = skill.name.toLowerCase();

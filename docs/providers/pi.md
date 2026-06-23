@@ -56,7 +56,7 @@ T3 Code also appends Pi system-prompt guidance that keeps browser work on the T3
 ## V1 Limitations
 
 - Attachments are not supported for Pi turns yet. File mentions, browser element context, preview annotation text, and review comments are sent as prompt text, but image attachments are blocked before dispatch so the composer draft remains available for retry.
-- Pi does not expose executable T3 Code skills or provider slash-command metadata yet. T3 Code keeps `$skill` and provider-command results empty for Pi rather than showing commands that Pi cannot execute.
+- Pi does not expose provider-native slash-command metadata yet. T3 Code keeps provider-command results empty for Pi until there is an executable Pi path, but `$skill` still uses the workspace skill catalog when available.
 - Pi extension status UI updates are ignored; interactive extension UI requests are reported as unsupported warnings.
 - Browser work through T3's preview MCP tools requires `pi-mcp-adapter` and an automation-capable T3 desktop preview owner for the scoped thread.
 - Model selection must resolve to a real Pi `provider/model` slug before sending.

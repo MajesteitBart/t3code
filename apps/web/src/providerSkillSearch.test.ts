@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { ServerProviderSkill } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  ProviderInstanceId,
+  type ServerProvider,
+  type ServerProviderSkill,
+} from "@t3tools/contracts";
 
-import { searchProviderSkills } from "./providerSkillSearch";
+import { resolveComposerProviderSkills, searchProviderSkills } from "./providerSkillSearch";
 
 function makeSkill(input: Partial<ServerProviderSkill> & Pick<ServerProviderSkill, "name">) {
   return {
@@ -10,6 +15,24 @@ function makeSkill(input: Partial<ServerProviderSkill> & Pick<ServerProviderSkil
     enabled: true,
     ...input,
   } satisfies ServerProviderSkill;
+}
+
+function makeProvider(
+  input: Partial<ServerProvider> & Pick<ServerProvider, "driver" | "instanceId">,
+): ServerProvider {
+  return {
+    displayName: String(input.driver),
+    enabled: true,
+    installed: true,
+    version: "1.0.0",
+    status: "ready",
+    auth: { status: "authenticated" },
+    checkedAt: "2026-06-23T00:00:00.000Z",
+    models: [],
+    slashCommands: [],
+    skills: [],
+    ...input,
+  } as ServerProvider;
 }
 
 describe("searchProviderSkills", () => {
@@ -55,5 +78,48 @@ describe("searchProviderSkills", () => {
     ];
 
     expect(searchProviderSkills(skills, "ui").map((skill) => skill.name)).toEqual([]);
+  });
+
+  it("falls back to workspace skills when the selected provider has none", () => {
+    const pi = makeProvider({
+      driver: ProviderDriverKind.make("pi"),
+      instanceId: ProviderInstanceId.make("pi"),
+      skills: [],
+    });
+    const codex = makeProvider({
+      driver: ProviderDriverKind.make("codex"),
+      instanceId: ProviderInstanceId.make("codex"),
+      skills: [
+        makeSkill({ name: "review-follow-up", displayName: "Review Follow Up" }),
+        makeSkill({ name: "disabled-skill", enabled: false }),
+      ],
+    });
+
+    expect(
+      resolveComposerProviderSkills({
+        selectedProviderStatus: pi,
+        providerStatuses: [pi, codex],
+      }).map((skill) => skill.name),
+    ).toEqual(["review-follow-up"]);
+  });
+
+  it("prefers selected provider skills when they exist", () => {
+    const pi = makeProvider({
+      driver: ProviderDriverKind.make("pi"),
+      instanceId: ProviderInstanceId.make("pi"),
+      skills: [makeSkill({ name: "pi-native" })],
+    });
+    const codex = makeProvider({
+      driver: ProviderDriverKind.make("codex"),
+      instanceId: ProviderInstanceId.make("codex"),
+      skills: [makeSkill({ name: "codex-skill" })],
+    });
+
+    expect(
+      resolveComposerProviderSkills({
+        selectedProviderStatus: pi,
+        providerStatuses: [pi, codex],
+      }).map((skill) => skill.name),
+    ).toEqual(["pi-native"]);
   });
 });
