@@ -2,9 +2,9 @@
 id: WS-A
 name: Provider Contract Probe
 owner: T3 Code maintainers
-status: active
+status: done
 created: 2026-06-23T10:27:50Z
-updated: 2026-06-23T10:27:50Z
+updated: 2026-06-23T12:47:56Z
 operating_mode: feature
 ---
 

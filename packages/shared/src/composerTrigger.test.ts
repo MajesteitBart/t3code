@@ -1,6 +1,34 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { serializeComposerFileLink, serializeComposerMentionPath } from "./composerTrigger.ts";
+import {
+  detectComposerTrigger,
+  serializeComposerFileLink,
+  serializeComposerMentionPath,
+} from "./composerTrigger.ts";
+
+describe("detectComposerTrigger", () => {
+  it("detects /model as a dedicated model trigger", () => {
+    const text = "/model";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-model",
+      query: "",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("keeps /model query text available for model picker filtering", () => {
+    const text = "/model glm";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-model",
+      query: "glm",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+});
 
 describe("serializeComposerMentionPath", () => {
   it("keeps simple mention paths unquoted", () => {

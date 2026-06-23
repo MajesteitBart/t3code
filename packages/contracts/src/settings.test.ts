@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
-import { ProviderInstanceId } from "./providerInstance.ts";
+import { DEFAULT_MODEL_BY_PROVIDER } from "./model.ts";
+import { ProviderDriverKind, ProviderInstanceId } from "./providerInstance.ts";
 import {
   ClientSettingsSchema,
   DEFAULT_SERVER_SETTINGS,
+  PiSettings,
   ServerSettings,
   ServerSettingsPatch,
 } from "./settings.ts";
 
 const decodeClientSettings = Schema.decodeUnknownSync(ClientSettingsSchema);
+const decodePiSettings = Schema.decodeUnknownSync(PiSettings);
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
@@ -84,6 +87,45 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
         providerInstances: { "1bad": { driver: "codex" } },
       }),
     ).toThrow();
+  });
+});
+
+describe("ServerSettings Pi provider", () => {
+  it("defaults Pi to disabled with the pi binary and no custom models", () => {
+    const pi = decodePiSettings({});
+
+    expect(pi.enabled).toBe(false);
+    expect(pi.binaryPath).toBe("pi");
+    expect(pi.customModels).toEqual([]);
+    expect(DEFAULT_SERVER_SETTINGS.providers.pi.enabled).toBe(false);
+  });
+
+  it("accepts configured Pi binary paths and provider/model custom slugs", () => {
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        pi: {
+          enabled: true,
+          binaryPath: "  C:/tools/pi.cmd  ",
+          customModels: ["  baseten/zai-org/GLM-5.2  "],
+        },
+      },
+    });
+
+    expect(patch.providers?.pi?.enabled).toBe(true);
+    expect(patch.providers?.pi?.binaryPath).toBe("C:/tools/pi.cmd");
+    expect(patch.providers?.pi?.customModels).toEqual(["baseten/zai-org/GLM-5.2"]);
+  });
+
+  it("rejects Pi custom models that are not provider/model slugs", () => {
+    expect(() =>
+      decodeServerSettingsPatch({
+        providers: { pi: { customModels: ["not-a-provider-model"] } },
+      }),
+    ).toThrow();
+  });
+
+  it("does not introduce a fake static Pi default model", () => {
+    expect(DEFAULT_MODEL_BY_PROVIDER[ProviderDriverKind.make("pi")]).toBeUndefined();
   });
 });
 

@@ -249,6 +249,35 @@ export function buildExpiredTerminalContextToastCopy(
   };
 }
 
+export interface UnsupportedProviderAttachmentSendBlock {
+  readonly title: string;
+  readonly description: string;
+  readonly threadError: string;
+}
+
+export function resolveUnsupportedProviderAttachmentSend(input: {
+  readonly provider: ProviderDriverKind;
+  readonly imageCount: number;
+  readonly promptContextCount?: number;
+}): UnsupportedProviderAttachmentSendBlock | null {
+  if (String(input.provider) !== "pi" || input.imageCount <= 0) {
+    return null;
+  }
+
+  const attachmentLabel = input.imageCount === 1 ? "image attachment" : "image attachments";
+  const pronoun = input.imageCount === 1 ? "it" : "them";
+  const contextNote =
+    (input.promptContextCount ?? 0) > 0
+      ? " File, browser, preview, and review mentions that are already prompt text can still be sent to Pi."
+      : "";
+
+  return {
+    title: "Pi cannot send attachments yet",
+    description: `Remove the ${attachmentLabel} and retry.${contextNote}`,
+    threadError: `Pi does not support ${attachmentLabel} yet. Remove ${pronoun} and retry; your prompt was preserved.`,
+  };
+}
+
 export function threadHasStarted(thread: Thread | null | undefined): boolean {
   return Boolean(
     thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),

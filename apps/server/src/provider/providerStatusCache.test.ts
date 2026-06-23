@@ -23,6 +23,7 @@ const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
+const PI_DRIVER = ProviderDriverKind.make("pi");
 
 const makeProvider = (
   provider: ProviderDriverKind,
@@ -89,6 +90,11 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         status: "warning",
         auth: { status: "unknown", type: "opencode" },
       });
+      const piProvider = makeProvider(PI_DRIVER, {
+        displayName: "Pi",
+        slashCommands: [],
+        skills: [],
+      });
       const codexPath = yield* resolveProviderStatusCachePath({
         cacheDir: tempDir,
         instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("codex")),
@@ -100,6 +106,10 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       const openCodePath = yield* resolveProviderStatusCachePath({
         cacheDir: tempDir,
         instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("opencode")),
+      });
+      const piPath = yield* resolveProviderStatusCachePath({
+        cacheDir: tempDir,
+        instanceId: defaultInstanceIdForDriver(ProviderDriverKind.make("pi")),
       });
 
       yield* writeProviderStatusCache({
@@ -114,10 +124,15 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         filePath: openCodePath,
         provider: openCodeProvider,
       });
+      yield* writeProviderStatusCache({
+        filePath: piPath,
+        provider: piProvider,
+      });
 
       assert.deepStrictEqual(yield* readProviderStatusCache(codexPath), codexProvider);
       assert.deepStrictEqual(yield* readProviderStatusCache(claudePath), claudeProvider);
       assert.deepStrictEqual(yield* readProviderStatusCache(openCodePath), openCodeProvider);
+      assert.deepStrictEqual(yield* readProviderStatusCache(piPath), piProvider);
     }),
   );
 

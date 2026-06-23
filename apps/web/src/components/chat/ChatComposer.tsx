@@ -83,6 +83,8 @@ import {
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "./composerProviderState";
+import { resolveComposerMenuEmptyState } from "./composerMenuEmptyState";
+import { resolveComposerSlashModelPickerAction } from "./composerSlashModelTrigger";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
@@ -886,6 +888,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const [isComposerFooterCompact, setIsComposerFooterCompact] = useState(false);
   const [isComposerPrimaryActionsCompact, setIsComposerPrimaryActionsCompact] = useState(false);
   const [isComposerModelPickerOpen, setIsComposerModelPickerOpen] = useState(false);
+  const [composerModelPickerInitialSearchQuery, setComposerModelPickerInitialSearchQuery] =
+    useState<string | undefined>(undefined);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const isMobileViewport = useMediaQuery("max-sm");
   const isComposerCollapsedMobile = isMobileViewport && !isComposerFocused;
@@ -901,6 +905,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerMenuOpenRef = useRef(false);
   const composerMenuItemsRef = useRef<ComposerCommandItem[]>([]);
   const activeComposerMenuItemRef = useRef<ComposerCommandItem | null>(null);
+  const handledSlashModelTriggerRef = useRef<string | null>(null);
   const composerBlurFrameRef = useRef<number | null>(null);
   const mobileComposerExpandFrameRef = useRef<number | null>(null);
   const mobileComposerExpandReleaseFrameRef = useRef<number | null>(null);
@@ -1014,7 +1019,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return [];
   }, [composerTrigger, selectedProvider, selectedProviderStatus, workspaceEntries.entries]);
 
-  const composerMenuOpen = Boolean(composerTrigger);
+  const composerMenuOpen = Boolean(composerTrigger && composerTrigger.kind !== "slash-model");
   const composerMenuSearchKey = composerTrigger
     ? `${composerTrigger.kind}:${composerTrigger.query.trim().toLowerCase()}`
     : null;
@@ -1079,13 +1084,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const isComposerMenuLoading =
     composerTriggerKind === "path" && pathTriggerQuery.length > 0 && workspaceEntries.isPending;
   const composerMenuEmptyState = useMemo(() => {
-    if (composerTriggerKind === "skill") {
-      return "No skills found. Try / to browse provider commands.";
-    }
-    return composerTriggerKind === "path"
-      ? "No matching files or folders."
-      : "No matching command.";
-  }, [composerTriggerKind]);
+    return resolveComposerMenuEmptyState({
+      triggerKind: composerTriggerKind,
+      selectedProvider,
+      selectedProviderStatus,
+    });
+  }, [composerTriggerKind, selectedProvider, selectedProviderStatus]);
 
   // ------------------------------------------------------------------
   // Provider traits UI
@@ -1141,8 +1145,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         : null,
     [activePendingIsResponding, activePendingProgress, activePendingResolvedAnswers],
   );
+  const hasSelectedModel = selectedModel.trim().length > 0;
   const collapsedComposerPrimaryActionDisabled =
-    phase === "running" || isSendBusy || isConnecting || !composerSendState.hasSendableContent;
+    phase === "running" ||
+    isSendBusy ||
+    isConnecting ||
+    !composerSendState.hasSendableContent ||
+    !hasSelectedModel;
   const collapsedComposerPrimaryActionLabel = "Send message";
   const showMobilePendingAnswerActions =
     isMobileViewport && !isComposerCollapsedMobile && pendingPrimaryAction !== null;
@@ -1538,6 +1547,48 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ],
   );
 
+  useEffect(() => {
+    const slashModelAction = resolveComposerSlashModelPickerAction({
+      trigger: composerTrigger,
+      prompt: promptRef.current,
+      selectedProvider,
+    });
+    if (!slashModelAction) {
+      handledSlashModelTriggerRef.current = null;
+      return;
+    }
+    if (isComposerApprovalState || pendingUserInputs.length > 0) {
+      return;
+    }
+
+    const triggerKey = `${slashModelAction.rangeStart}:${slashModelAction.rangeEnd}:${slashModelAction.expectedText}`;
+    if (handledSlashModelTriggerRef.current === triggerKey) {
+      return;
+    }
+    handledSlashModelTriggerRef.current = triggerKey;
+    setComposerModelPickerInitialSearchQuery(slashModelAction.query);
+    const applied = applyPromptReplacement(
+      slashModelAction.rangeStart,
+      slashModelAction.rangeEnd,
+      "",
+      {
+        expectedText: slashModelAction.expectedText,
+        focusEditorAfterReplace: false,
+      },
+    );
+    if (applied) {
+      setComposerHighlightedItemId(null);
+    }
+    setIsComposerModelPickerOpen(true);
+  }, [
+    applyPromptReplacement,
+    composerTrigger,
+    isComposerApprovalState,
+    pendingUserInputs.length,
+    promptRef,
+    selectedProvider,
+  ]);
+
   const readComposerSnapshot = useCallback((): {
     value: string;
     cursor: number;
@@ -1602,6 +1653,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           });
           if (applied) {
             setComposerHighlightedItemId(null);
+            setComposerModelPickerInitialSearchQuery(undefined);
             setIsComposerModelPickerOpen(true);
           }
           return;
@@ -1954,9 +2006,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         return applyPromptReplacement(rangeEnd, rangeEnd, text);
       },
       openModelPicker: () => {
+        setComposerModelPickerInitialSearchQuery(undefined);
         setIsComposerModelPickerOpen(true);
       },
       toggleModelPicker: () => {
+        setComposerModelPickerInitialSearchQuery(undefined);
         setIsComposerModelPickerOpen((open) => !open);
       },
       isModelPickerOpen: () => isComposerModelPickerOpen,
@@ -2503,6 +2557,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   modelOptionsByInstance={modelOptionsByInstance}
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
+                  {...(composerModelPickerInitialSearchQuery !== undefined
+                    ? { initialSearchQuery: composerModelPickerInitialSearchQuery }
+                    : {})}
                   {...(composerProviderState.modelPickerIconClassName
                     ? {
                         activeProviderIconClassName: composerProviderState.modelPickerIconClassName,
@@ -2510,6 +2567,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : {})}
                   onOpenChange={(open) => {
                     setIsComposerModelPickerOpen(open);
+                    if (!open) {
+                      setComposerModelPickerInitialSearchQuery(undefined);
+                    }
                   }}
                   getModelDisabledReason={getModelDisabledReason}
                   onInstanceModelChange={onProviderModelSelect}
@@ -2571,7 +2631,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   isConnecting={isConnecting}
                   isEnvironmentUnavailable={environmentUnavailable !== null}
                   isPreparingWorktree={isPreparingWorktree}
-                  hasSendableContent={composerSendState.hasSendableContent}
+                  hasSendableContent={composerSendState.hasSendableContent && hasSelectedModel}
                   preserveComposerFocusOnPointerDown={isMobileViewport}
                   onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
                   onInterrupt={handleInterruptPrimaryAction}

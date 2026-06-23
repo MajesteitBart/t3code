@@ -2,9 +2,9 @@
 id: WS-D
 name: Verification And Docs
 owner: T3 Code maintainers
-status: active
+status: done
 created: 2026-06-23T10:27:50Z
-updated: 2026-06-23T10:55:11Z
+updated: 2026-06-23T15:19:24Z
 operating_mode: feature
 ---
 
@@ -30,7 +30,7 @@ Prove Pi provider readiness with automated gates, targeted tests, live smoke evi
 
 - Final E2E may be blocked if Pi is unavailable locally.
 - Browser behavior must be checked after provider/model picker changes.
-- In-app browser behavior must not be claimed unless Pi can access T3 `preview_*` MCP tools or the unsupported state is explicitly documented.
+- In-app browser behavior must not be claimed unless Pi can access T3 `preview_*` MCP tools through `pi-mcp-adapter` or bridge failure is explicitly documented.
 
 ## Handoff Criteria
 
@@ -38,4 +38,4 @@ Prove Pi provider readiness with automated gates, targeted tests, live smoke evi
 - Targeted tests pass.
 - UI/live verification evidence is recorded.
 - Provider docs are updated for Pi setup and limitations.
-- T3 in-app browser support or limitation is documented separately from Pi-native `agent-browser`.
+- T3 in-app browser support through `pi-mcp-adapter` is documented separately from Pi-native `agent-browser`.

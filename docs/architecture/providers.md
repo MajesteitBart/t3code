@@ -13,7 +13,9 @@ Methods mirror the `NativeApi` interface defined in `@t3tools/contracts`:
 - `providers.respondToRequest`, `providers.stopSession`
 - `shell.openInEditor`, `server.getConfig`
 
-Codex is the only implemented provider. `claudeCode` is reserved in contracts/UI.
+Implemented providers are registered as provider drivers on the server. Current built-in drivers include Codex, Claude, Cursor, Grok, OpenCode, and Pi.
+
+Pi uses Pi RPC mode (`pi --mode rpc`) through the same provider session boundary as the other drivers. T3's in-app browser remains exposed through provider-scoped MCP `preview_*` tools; Pi consumes that server through the `pi-mcp-adapter` extension by receiving a scoped `--mcp-config` file plus a bearer token environment variable. The driver does not fall back to Pi `agent-browser`, global Chrome automation, or standalone Playwright.
 
 ## Client transport
 

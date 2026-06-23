@@ -37,6 +37,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   disabled?: boolean;
   terminalOpen?: boolean;
   open?: boolean;
+  initialSearchQuery?: string;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onOpenChange?: (open: boolean) => void;
@@ -64,8 +65,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const selectedModel =
     selectedInstanceOptions.find((option) => option.slug === props.model) ??
     selectedInstanceOptions[0];
-  const triggerTitle = selectedModel ? getTriggerDisplayModelName(selectedModel) : props.model;
-  const triggerLabel = selectedModel ? getTriggerDisplayModelLabel(selectedModel) : props.model;
+  const triggerTitle = selectedModel
+    ? getTriggerDisplayModelName(selectedModel)
+    : props.model || "No models";
+  const triggerLabel = selectedModel
+    ? getTriggerDisplayModelLabel(selectedModel)
+    : props.model || "No models found";
   const duplicateDriverCount = props.instanceEntries.filter(
     (entry) => activeEntry !== null && entry.driverKind === activeEntry.driverKind,
   ).length;
@@ -199,6 +204,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           {...(props.keybindings ? { keybindings: props.keybindings } : {})}
           modelOptionsByInstance={props.modelOptionsByInstance}
           terminalOpen={props.terminalOpen ?? false}
+          {...(props.initialSearchQuery !== undefined
+            ? { initialSearchQuery: props.initialSearchQuery }
+            : {})}
           onRequestClose={() => setIsMenuOpen(false)}
           {...(props.getModelDisabledReason
             ? { getModelDisabledReason: props.getModelDisabledReason }

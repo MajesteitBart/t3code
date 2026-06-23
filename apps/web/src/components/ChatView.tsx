@@ -219,6 +219,7 @@ import {
   readFileAsDataUrl,
   reconcileMountedTerminalThreadIds,
   resolveSendEnvMode,
+  resolveUnsupportedProviderAttachmentSend,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
   waitForStartedServerThread,
@@ -3627,6 +3628,30 @@ function ChatViewContent(props: ChatViewProps) {
       }
       return;
     }
+    if (ctxSelectedModel.trim().length === 0) {
+      setThreadError(activeThread.id, "Select a model before sending.");
+      return;
+    }
+    const unsupportedAttachmentSendBlock = resolveUnsupportedProviderAttachmentSend({
+      provider: ctxSelectedProvider,
+      imageCount: composerImages.length,
+      promptContextCount:
+        sendableComposerTerminalContexts.length +
+        composerElementContexts.length +
+        composerPreviewAnnotations.length +
+        composerReviewComments.length,
+    });
+    if (unsupportedAttachmentSendBlock) {
+      setThreadError(activeThread.id, unsupportedAttachmentSendBlock.threadError);
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: unsupportedAttachmentSendBlock.title,
+          description: unsupportedAttachmentSendBlock.description,
+        }),
+      );
+      return;
+    }
     if (!activeProject) return;
     const threadIdForSend = activeThread.id;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
@@ -3752,7 +3777,7 @@ function ChatViewContent(props: ChatViewProps) {
     const title = truncate(titleSeed);
     const threadCreateModelSelection = createModelSelection(
       ctxSelectedModelSelection.instanceId,
-      ctxSelectedModel || activeProject.defaultModelSelection?.model || DEFAULT_MODEL,
+      ctxSelectedModel,
       ctxSelectedModelSelection.options,
     );
 

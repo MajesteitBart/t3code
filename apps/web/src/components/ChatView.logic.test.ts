@@ -1,4 +1,11 @@
-import { EnvironmentId, ProjectId, ProviderInstanceId, ThreadId, TurnId } from "@t3tools/contracts";
+import {
+  EnvironmentId,
+  ProjectId,
+  ProviderDriverKind,
+  ProviderInstanceId,
+  ThreadId,
+  TurnId,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { Thread } from "../types";
@@ -13,6 +20,7 @@ import {
   reconcileMountedTerminalThreadIds,
   reconcileRetainedMountedThreadIds,
   resolveSendEnvMode,
+  resolveUnsupportedProviderAttachmentSend,
   shouldWriteThreadErrorToCurrentServerThread,
 } from "./ChatView.logic";
 
@@ -152,6 +160,53 @@ describe("buildExpiredTerminalContextToastCopy", () => {
       title: "Expired terminal contexts omitted from message",
       description: "Re-add it if you want that terminal output included.",
     });
+  });
+});
+
+describe("resolveUnsupportedProviderAttachmentSend", () => {
+  it("allows Pi file mentions once they are serialized as prompt text", () => {
+    expect(
+      resolveUnsupportedProviderAttachmentSend({
+        provider: ProviderDriverKind.make("pi"),
+        imageCount: 0,
+        promptContextCount: 0,
+      }),
+    ).toBeNull();
+  });
+
+  it("allows Pi document and browser contexts that ride as prompt text", () => {
+    expect(
+      resolveUnsupportedProviderAttachmentSend({
+        provider: ProviderDriverKind.make("pi"),
+        imageCount: 0,
+        promptContextCount: 2,
+      }),
+    ).toBeNull();
+  });
+
+  it("blocks Pi attachment sends before dispatch so the composer can preserve retry state", () => {
+    expect(
+      resolveUnsupportedProviderAttachmentSend({
+        provider: ProviderDriverKind.make("pi"),
+        imageCount: 1,
+        promptContextCount: 1,
+      }),
+    ).toEqual({
+      title: "Pi cannot send attachments yet",
+      description:
+        "Remove the image attachment and retry. File, browser, preview, and review mentions that are already prompt text can still be sent to Pi.",
+      threadError:
+        "Pi does not support image attachment yet. Remove it and retry; your prompt was preserved.",
+    });
+  });
+
+  it("does not gate attachments for providers that support them", () => {
+    expect(
+      resolveUnsupportedProviderAttachmentSend({
+        provider: ProviderDriverKind.make("codex"),
+        imageCount: 2,
+      }),
+    ).toBeNull();
   });
 });
 

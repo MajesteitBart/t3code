@@ -2,9 +2,9 @@
 id: WS-B
 name: Server Runtime And Adapter
 owner: T3 Code maintainers
-status: active
+status: done
 created: 2026-06-23T10:27:50Z
-updated: 2026-06-23T10:27:50Z
+updated: 2026-06-23T14:02:12Z
 operating_mode: feature
 ---
 

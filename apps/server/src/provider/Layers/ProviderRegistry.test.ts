@@ -33,6 +33,7 @@ import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
 import * as OpenCodeRuntime from "../opencodeRuntime.ts";
+import * as PiRpcRuntime from "../piRpcRuntime.ts";
 import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./ProviderInstanceRegistryHydration.ts";
 import {
@@ -1077,6 +1078,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                   cursor: { enabled: false },
                   grok: { enabled: false },
                   opencode: { enabled: false },
+                  pi: { enabled: false },
                 },
                 // `providerInstances` keys are branded `ProviderInstanceId`;
                 // the branded index signature rejects plain string literals
@@ -1120,6 +1122,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               ),
             ),
             Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+            Layer.provideMerge(PiRpcRuntime.PiRuntimeLive),
             // NO spawner mock — `ChildProcessSpawner` is supplied by the
             // outer `NodeServices.layer` on `it.layer(...)` and will
             // genuinely spawn a subprocess. The missing-binary ENOENT is
@@ -1188,6 +1191,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                   cursor: { enabled: false },
                   grok: { enabled: false },
                   opencode: { enabled: false },
+                  pi: { enabled: false },
                 },
               }),
             ),
@@ -1212,6 +1216,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               ),
             ),
             Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+            Layer.provideMerge(PiRpcRuntime.PiRuntimeLive),
             Layer.updateService(ChildProcessSpawner.ChildProcessSpawner, (spawner) =>
               ChildProcessSpawner.make((command) => {
                 spawnedCommands.push((command as { readonly command: string }).command);
@@ -1301,6 +1306,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                   cursor: { enabled: false },
                   grok: { enabled: false },
                   opencode: { enabled: false },
+                  pi: { enabled: false },
                 },
                 providerInstances: {
                   ghost_main: {
@@ -1333,6 +1339,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               ),
             ),
             Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+            Layer.provideMerge(PiRpcRuntime.PiRuntimeLive),
             Layer.provideMerge(NodeServices.layer),
           );
           const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
@@ -1369,6 +1376,9 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                     grok: {
                       enabled: false,
                     },
+                    pi: {
+                      enabled: false,
+                    },
                   },
                 }),
               ),
@@ -1394,6 +1404,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 ),
               ),
               Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+              Layer.provideMerge(PiRpcRuntime.PiRuntimeLive),
               Layer.provideMerge(
                 mockCommandSpawnerLayer((command, args) => {
                   if (command === "agent") {
@@ -1438,6 +1449,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 "cursor",
                 "grok",
                 "opencode",
+                "pi",
               ]);
               assert.strictEqual(cursorProvider?.enabled, false);
               assert.strictEqual(cursorProvider?.status, "disabled");
@@ -1721,6 +1733,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
 
       it.effect("runs Claude status probes with the configured Claude HOME", () => {
         const claudeHome = "/tmp/t3code-claude-home";
+        const normalizeClaudeHome = (value: string | undefined) =>
+          value?.replace(/^[A-Z]:\\tmp\\/i, "/tmp/").replaceAll("\\", "/");
         const recorded = recordingMockSpawnerLayer((args) => {
           const joined = args.join(" ");
           if (joined === "--version") return { stdout: "1.0.0\n", stderr: "", code: 0 };
@@ -1743,7 +1757,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           );
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
-            recorded.commands.map((command) => command.env?.HOME),
+            recorded.commands.map((command) => normalizeClaudeHome(command.env?.HOME)),
             [claudeHome],
           );
         }).pipe(Effect.provide(recorded.layer));

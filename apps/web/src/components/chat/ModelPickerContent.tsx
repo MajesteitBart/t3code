@@ -85,6 +85,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    */
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
   terminalOpen: boolean;
+  initialSearchQuery?: string;
   onRequestClose?: () => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
@@ -96,7 +97,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     getModelDisabledReason,
     onInstanceModelChange,
   } = props;
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(props.initialSearchQuery ?? "");
   const [showTopScrollFade, setShowTopScrollFade] = useState(false);
   const [showBottomScrollFade, setShowBottomScrollFade] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -118,6 +119,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     [providedKeybindings],
   );
   const updateSettings = useUpdateClientSettings();
+
+  useEffect(() => {
+    if (props.initialSearchQuery !== undefined) {
+      setSearchQuery(props.initialSearchQuery);
+    }
+  }, [props.initialSearchQuery]);
 
   const focusSearchInput = useCallback(() => {
     searchInputRef.current?.focus({ preventScroll: true });

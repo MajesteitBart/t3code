@@ -24,9 +24,11 @@ const CODEX_INSTANCE = ProviderInstanceId.make("codex");
 const CODEX_SECONDARY_INSTANCE = ProviderInstanceId.make("codex_secondary");
 const CLAUDE_AGENT_INSTANCE = ProviderInstanceId.make("claudeAgent");
 const CURSOR_INSTANCE = ProviderInstanceId.make("cursor");
+const PI_INSTANCE = ProviderInstanceId.make("pi");
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const PI_DRIVER = ProviderDriverKind.make("pi");
 
 type ProviderOptionSelectionBag = ReadonlyArray<ProviderOptionSelection>;
 type ProviderOptionSelectionsByProvider = Partial<Record<string, ProviderOptionSelectionBag>>;
@@ -1608,6 +1610,16 @@ describe("composerDraftStore provider-scoped option updates", () => {
       ).options,
     );
     expect(draft?.activeProvider).toBe("codex");
+  });
+
+  it("does not synthesize a default Codex model for Pi option memory", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setProviderModelOptions(threadRef, PI_DRIVER, toSelections({ thinking: "high" }));
+
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[PI_INSTANCE]).toEqual(
+      createModelSelection(PI_INSTANCE, "", toSelections({ thinking: "high" })),
+    );
   });
 });
 

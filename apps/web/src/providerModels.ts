@@ -14,6 +14,7 @@ const EMPTY_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
 });
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
+const PI_DRIVER_KIND = ProviderDriverKind.make("pi");
 
 export function formatProviderDriverKindLabel(provider: ProviderDriverKind): string {
   return provider
@@ -91,10 +92,12 @@ export function getDefaultServerModel(
   provider: ProviderDriverKind,
 ): string {
   const models = getProviderModels(providers, provider);
-  return (
-    models.find((model) => !model.isCustom)?.slug ??
-    models[0]?.slug ??
-    DEFAULT_MODEL_BY_PROVIDER[provider] ??
-    DEFAULT_MODEL
-  );
+  const serverDefaultModel = models.find((model) => !model.isCustom)?.slug ?? models[0]?.slug;
+  if (serverDefaultModel) {
+    return serverDefaultModel;
+  }
+  if (provider === PI_DRIVER_KIND) {
+    return "";
+  }
+  return DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL;
 }

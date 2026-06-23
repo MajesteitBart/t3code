@@ -65,6 +65,21 @@ export const DraftId = Schema.String.pipe(Schema.brand("DraftId"));
 export type DraftId = typeof DraftId.Type;
 
 const COMPOSER_PERSIST_DEBOUNCE_MS = 300;
+const PI_DRIVER_KIND = ProviderDriverKind.make("pi");
+const PROVIDERS_WITH_LEGACY_MODEL_OPTIONS = [
+  "codex",
+  "claudeAgent",
+  "cursor",
+  "grok",
+  "opencode",
+  "pi",
+] as const;
+
+function fallbackModelForProvider(driverKind: ProviderDriverKind): string {
+  return (
+    DEFAULT_MODEL_BY_PROVIDER[driverKind] ?? (driverKind === PI_DRIVER_KIND ? "" : DEFAULT_MODEL)
+  );
+}
 
 const composerDebouncedStorage = createDebouncedStorage(
   typeof localStorage !== "undefined" ? localStorage : createMemoryStorage(),
@@ -761,7 +776,7 @@ function normalizeProviderModelOptions(
 ): ProviderOptionSelectionsByProvider | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
   const result: ProviderOptionSelectionsByProvider = {};
-  for (const providerKey of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
+  for (const providerKey of PROVIDERS_WITH_LEGACY_MODEL_OPTIONS) {
     const selections = coerceProviderOptionSelections(candidate?.[providerKey]);
     if (selections) {
       result[providerKey] = selections;
@@ -920,7 +935,7 @@ function legacyToModelSelectionByProvider(
 ): Partial<Record<ProviderInstanceId, ModelSelection>> {
   const result: Partial<Record<ProviderInstanceId, ModelSelection>> = {};
   if (modelOptions) {
-    for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
+    for (const provider of PROVIDERS_WITH_LEGACY_MODEL_OPTIONS) {
       const options = modelOptions[provider];
       if (options && options.length > 0) {
         const driverKind = ProviderDriverKind.make(provider);
@@ -929,7 +944,7 @@ function legacyToModelSelectionByProvider(
           instanceKey,
           modelSelection?.instanceId === instanceKey
             ? modelSelection.model
-            : (DEFAULT_MODEL_BY_PROVIDER[driverKind] ?? DEFAULT_MODEL),
+            : fallbackModelForProvider(driverKind),
           options,
         );
       }
@@ -2654,7 +2669,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
             }
             const base = existing ?? createEmptyThreadDraft();
             const nextMap = { ...base.modelSelectionByProvider };
-            for (const provider of ["codex", "claudeAgent", "cursor", "opencode"] as const) {
+            for (const provider of PROVIDERS_WITH_LEGACY_MODEL_OPTIONS) {
               if (!modelOptions || !(provider in modelOptions)) continue;
               const opts = modelOptions[provider];
               const driverKind = ProviderDriverKind.make(provider);
@@ -2663,7 +2678,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               if (opts && opts.length > 0) {
                 nextMap[instanceKey] = createModelSelection(
                   instanceKey,
-                  current?.model ?? DEFAULT_MODEL_BY_PROVIDER[driverKind] ?? DEFAULT_MODEL,
+                  current?.model ?? fallbackModelForProvider(driverKind),
                   opts,
                 );
               } else if (current?.options) {
@@ -2699,8 +2714,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           const instanceKey = options?.instanceId ?? defaultInstanceIdForDriver(normalizedProvider);
           const fallbackModel =
             normalizeModelSlug(options?.model, normalizedProvider) ??
-            DEFAULT_MODEL_BY_PROVIDER[normalizedProvider] ??
-            DEFAULT_MODEL;
+            fallbackModelForProvider(normalizedProvider);
           const providerOpts =
             nextProviderOptions && nextProviderOptions.length > 0 ? nextProviderOptions : undefined;
 

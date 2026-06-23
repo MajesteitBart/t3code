@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { deriveProviderInstanceEntries } from "./providerInstances";
 import {
   getAppModelOptionsForInstance,
+  resolveAppModelSelection,
   resolveAppModelSelectionForInstance,
   resolveAppModelSelectionState,
 } from "./modelSelection";
@@ -268,5 +269,43 @@ describe("instance-scoped model selection", () => {
       instanceId: ProviderInstanceId.make("claude_openrouter"),
       model: "openai/gpt-5.5",
     });
+  });
+
+  it("does not resolve Pi to the global default when no Pi models are available", () => {
+    const piDriver = ProviderDriverKind.make("pi");
+    const providers = [provider({ provider: piDriver, instanceId: "pi", models: [] })];
+
+    expect(resolveAppModelSelection(piDriver, DEFAULT_UNIFIED_SETTINGS, providers, null)).toBe("");
+    expect(
+      resolveAppModelSelectionForInstance(
+        ProviderInstanceId.make("pi"),
+        DEFAULT_UNIFIED_SETTINGS,
+        providers,
+        "gpt-5.4",
+      ),
+    ).toBeNull();
+  });
+
+  it("selects dynamic Pi models from the live provider snapshot", () => {
+    const piDriver = ProviderDriverKind.make("pi");
+    const providers = [
+      provider({
+        provider: piDriver,
+        instanceId: "pi",
+        models: ["baseten/zai-org/GLM-5.2"],
+      }),
+    ];
+
+    expect(resolveAppModelSelection(piDriver, DEFAULT_UNIFIED_SETTINGS, providers, null)).toBe(
+      "baseten/zai-org/GLM-5.2",
+    );
+    expect(
+      resolveAppModelSelectionForInstance(
+        ProviderInstanceId.make("pi"),
+        DEFAULT_UNIFIED_SETTINGS,
+        providers,
+        null,
+      ),
+    ).toBe("baseten/zai-org/GLM-5.2");
   });
 });

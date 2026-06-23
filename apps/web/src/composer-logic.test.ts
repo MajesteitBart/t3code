@@ -36,23 +36,28 @@ describe("detectComposerTrigger", () => {
     });
   });
 
-  it("keeps /model as a slash command item", () => {
+  it("treats /model as a dedicated model picker trigger", () => {
     const text = "/model";
     const trigger = detectComposerTrigger(text, text.length);
 
     expect(trigger).toEqual({
-      kind: "slash-command",
-      query: "model",
+      kind: "slash-model",
+      query: "",
       rangeStart: 0,
       rangeEnd: text.length,
     });
   });
 
-  it("does not keep a subcommand trigger active after /model arguments", () => {
+  it("keeps a model picker query active after /model arguments", () => {
     const text = "/model spark";
     const trigger = detectComposerTrigger(text, text.length);
 
-    expect(trigger).toBeNull();
+    expect(trigger).toEqual({
+      kind: "slash-model",
+      query: "spark",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
   });
 
   it("detects non-model slash commands while typing", () => {
