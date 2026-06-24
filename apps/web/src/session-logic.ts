@@ -449,9 +449,6 @@ function parseUserInputQuestions(
           };
         })
         .filter((option): option is UserInputQuestion["options"][number] => option !== null);
-      if (options.length === 0) {
-        return null;
-      }
       return {
         id: question.id,
         header: question.header,
@@ -1056,6 +1053,9 @@ function extractToolCommand(payload: Record<string, unknown> | null): {
   const item = asRecord(data?.item);
   const itemResult = asRecord(item?.result);
   const itemInput = asRecord(item?.input);
+  const rawInput = asRecord(data?.rawInput);
+  const rawOutput = asRecord(data?.rawOutput);
+  const rawOutputDetails = asRecord(rawOutput?.details);
   const itemType = asTrimmedString(payload?.itemType);
   const detail = asTrimmedString(payload?.detail);
   const candidates: unknown[] = [
@@ -1063,6 +1063,12 @@ function extractToolCommand(payload: Record<string, unknown> | null): {
     itemInput?.command,
     itemResult?.command,
     data?.command,
+    rawInput?.command,
+    rawInput?.cmd,
+    rawInput?.script,
+    rawInput?.args,
+    rawOutputDetails?.args,
+    rawOutputDetails?.effectiveArgs,
     itemType === "command_execution" && detail ? stripTrailingExitCode(detail).output : null,
   ];
 
@@ -1268,10 +1274,14 @@ function collectChangedFiles(value: unknown, target: string[], seen: Set<string>
 
   pushChangedFile(target, seen, record.path);
   pushChangedFile(target, seen, record.filePath);
+  pushChangedFile(target, seen, record.file_path);
   pushChangedFile(target, seen, record.relativePath);
+  pushChangedFile(target, seen, record.relative_path);
   pushChangedFile(target, seen, record.filename);
   pushChangedFile(target, seen, record.newPath);
+  pushChangedFile(target, seen, record.new_path);
   pushChangedFile(target, seen, record.oldPath);
+  pushChangedFile(target, seen, record.old_path);
 
   for (const nestedKey of [
     "item",
@@ -1284,6 +1294,9 @@ function collectChangedFiles(value: unknown, target: string[], seen: Set<string>
     "patch",
     "patches",
     "operations",
+    "rawInput",
+    "rawOutput",
+    "details",
   ]) {
     if (!(nestedKey in record)) {
       continue;

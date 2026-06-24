@@ -1,8 +1,10 @@
 import {
+  ApprovalRequestId,
   EventId,
   type PiSettings,
   ProviderDriverKind,
   ProviderInstanceId,
+  type ProviderUserInputAnswers,
   type ProviderRuntimeEvent,
   type ProviderSession,
   RuntimeItemId,
@@ -10,6 +12,7 @@ import {
   type ThreadId,
   type ToolLifecycleItemType,
   TurnId,
+  type UserInputQuestion,
 } from "@t3tools/contracts";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import * as Cause from "effect/Cause";
@@ -40,6 +43,7 @@ import {
   PiRuntime,
   PiRuntimeError,
   piRuntimeErrorDetail,
+  type PiRpcCommand,
   type PiRpcEvent,
   type PiRpcResponse,
   type PiThinkingLevel,
@@ -87,9 +91,20 @@ interface PiSessionContext {
   readonly sessionScope: Scope.Closeable;
   readonly turns: Array<PiTurnSnapshot>;
   readonly completedTurnIds: Set<TurnId>;
+  readonly toolInputById: Map<string, Record<string, unknown>>;
+  readonly pendingExtensionUserInputs: Map<ApprovalRequestId, PendingPiExtensionUserInput>;
   activeTurnId: TurnId | undefined;
   readonly stopped: Ref.Ref<boolean>;
   readonly cleanup: Effect.Effect<void, never>;
+}
+
+type PiExtensionUserInputMethod = "select" | "confirm" | "input" | "editor";
+
+interface PendingPiExtensionUserInput {
+  readonly extensionRequestId: string;
+  readonly method: PiExtensionUserInputMethod;
+  readonly questionId: string;
+  readonly question: string;
 }
 
 interface PiAdapterLiveOptions {
@@ -173,8 +188,218 @@ function resolveToolCallId(event: Record<string, unknown>): string | undefined {
   return stringField(event, "toolCallId") ?? stringField(event, "id");
 }
 
+function formatPiToolArgs(args: ReadonlyArray<unknown>): string | undefined {
+  const parts = args
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter((part) => part.length > 0);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
+function commandFromPiToolPayload(
+  input: Record<string, unknown> | undefined,
+  output: Record<string, unknown> | undefined,
+): string | undefined {
+  const direct =
+    (input &&
+      (stringField(input, "command") ??
+        stringField(input, "cmd") ??
+        stringField(input, "script"))) ??
+    (output && (stringField(output, "command") ?? stringField(output, "cmd")));
+  if (direct) {
+    return direct;
+  }
+
+  if (input && Array.isArray(input.args)) {
+    return formatPiToolArgs(input.args);
+  }
+
+  const details = output && isRecord(output.details) ? output.details : undefined;
+  if (details && Array.isArray(details.args)) {
+    return formatPiToolArgs(details.args);
+  }
+
+  return undefined;
+}
+
+function buildPiToolData(
+  event: Record<string, unknown>,
+  toolName: string,
+  toolCallId: string | undefined,
+  previousInput: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const input = isRecord(event.args) ? event.args : previousInput;
+  const output =
+    event.type === "tool_execution_update"
+      ? isRecord(event.partialResult)
+        ? event.partialResult
+        : undefined
+      : event.type === "tool_execution_end"
+        ? isRecord(event.result)
+          ? event.result
+          : undefined
+        : undefined;
+  const command = commandFromPiToolPayload(input, output);
+
+  return {
+    ...(toolCallId ? { toolCallId } : {}),
+    kind: toolName.toLowerCase(),
+    ...(input ? { rawInput: input } : {}),
+    ...(output ? { rawOutput: output } : {}),
+    ...(command ? { command } : {}),
+  };
+}
+
 function isBenignExtensionUiRequest(event: PiRpcEvent): boolean {
-  return isRecord(event) && stringField(event, "method") === "setStatus";
+  if (!isRecord(event)) {
+    return false;
+  }
+  const method = stringField(event, "method");
+  return (
+    method === "notify" ||
+    method === "setStatus" ||
+    method === "setWidget" ||
+    method === "setTitle" ||
+    method === "set_editor_text"
+  );
+}
+
+function piExtensionUserInputMethod(event: PiRpcEvent): PiExtensionUserInputMethod | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+  const method = stringField(event, "method");
+  return method === "select" || method === "confirm" || method === "input" || method === "editor"
+    ? method
+    : undefined;
+}
+
+function piExtensionRequestTitle(event: Record<string, unknown>): string | undefined {
+  return stringField(event, "title") ?? stringField(event, "message");
+}
+
+function normalizePiExtensionOptions(
+  value: unknown,
+): ReadonlyArray<UserInputQuestion["options"][number]> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const label = typeof entry === "string" ? entry.trim() : "";
+    return label.length > 0 ? [{ label, description: label }] : [];
+  });
+}
+
+function buildPiExtensionUserInputQuestion(
+  event: PiRpcEvent,
+):
+  | { readonly pending: PendingPiExtensionUserInput; readonly question: UserInputQuestion }
+  | undefined {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+  const method = piExtensionUserInputMethod(event);
+  const extensionRequestId = stringField(event, "id");
+  const title = piExtensionRequestTitle(event);
+  if (!method || !extensionRequestId || !title) {
+    return undefined;
+  }
+
+  const questionId = `${method}:${extensionRequestId}`;
+  const question: UserInputQuestion = {
+    id: questionId,
+    header:
+      method === "confirm"
+        ? "Confirm"
+        : method === "select"
+          ? "Choose"
+          : method === "editor"
+            ? "Input"
+            : "Question",
+    question: title,
+    options:
+      method === "confirm"
+        ? [
+            { label: "Yes", description: "Confirm" },
+            { label: "No", description: "Cancel" },
+          ]
+        : normalizePiExtensionOptions(event.options),
+    multiSelect: false,
+  };
+  return {
+    pending: {
+      extensionRequestId,
+      method,
+      questionId,
+      question: title,
+    },
+    question,
+  };
+}
+
+function firstAnswerValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function stringAnswerForPendingPiRequest(
+  pending: PendingPiExtensionUserInput,
+  answers: ProviderUserInputAnswers,
+): string | undefined {
+  const value = firstAnswerValue(answers[pending.questionId] ?? answers[pending.question]);
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function piConfirmAnswer(value: string | undefined): boolean | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (["yes", "true", "confirm", "confirmed", "ok", "continue"].includes(normalized)) {
+    return true;
+  }
+  if (["no", "false", "cancel", "cancelled", "deny"].includes(normalized)) {
+    return false;
+  }
+  return undefined;
+}
+
+function buildPiExtensionUiResponse(
+  pending: PendingPiExtensionUserInput,
+  answers: ProviderUserInputAnswers,
+): PiRpcCommand {
+  const answer = stringAnswerForPendingPiRequest(pending, answers);
+  if (!answer) {
+    return {
+      type: "extension_ui_response",
+      id: pending.extensionRequestId,
+      cancelled: true,
+    };
+  }
+  if (pending.method === "confirm") {
+    const confirmed = piConfirmAnswer(answer);
+    return confirmed === undefined
+      ? {
+          type: "extension_ui_response",
+          id: pending.extensionRequestId,
+          cancelled: true,
+        }
+      : {
+          type: "extension_ui_response",
+          id: pending.extensionRequestId,
+          confirmed,
+        };
+  }
+  return {
+    type: "extension_ui_response",
+    id: pending.extensionRequestId,
+    value: answer,
+  };
 }
 
 function resolveTurnSnapshot(context: PiSessionContext, turnId: TurnId): PiTurnSnapshot {
@@ -618,6 +843,11 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
       const toolName = resolveToolName(event);
       const itemId = resolveToolCallId(event);
       const itemType = toToolLifecycleItemType(toolName);
+      const currentInput = isRecord(event.args) ? event.args : undefined;
+      const previousInput = itemId ? context.toolInputById.get(itemId) : undefined;
+      if (itemId && currentInput) {
+        context.toolInputById.set(itemId, currentInput);
+      }
       const status =
         event.type === "tool_execution_end"
           ? event.isError === true
@@ -642,12 +872,12 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
           itemType,
           status,
           title: toolName,
-          data:
-            event.type === "tool_execution_update"
-              ? (event.partialResult ?? event)
-              : (event.result ?? event.args ?? event),
+          data: buildPiToolData(event, toolName, itemId, previousInput),
         },
       });
+      if (itemId && event.type === "tool_execution_end") {
+        context.toolInputById.delete(itemId);
+      }
     });
 
     const handlePiEvent = Effect.fn("handlePiEvent")(function* (
@@ -711,6 +941,24 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
         }
         case "extension_ui_request": {
           if (isBenignExtensionUiRequest(event)) {
+            break;
+          }
+          const request = buildPiExtensionUserInputQuestion(event);
+          if (request) {
+            const requestId = ApprovalRequestId.make(request.pending.extensionRequestId);
+            context.pendingExtensionUserInputs.set(requestId, request.pending);
+            yield* emit({
+              ...(yield* buildEventBase({
+                threadId: context.session.threadId,
+                turnId: context.activeTurnId,
+                requestId,
+                raw: event,
+              })),
+              type: "user-input.requested",
+              payload: {
+                questions: [request.question],
+              },
+            });
             break;
           }
           yield* emit({
@@ -926,6 +1174,8 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
           activeTurnId: undefined,
           stopped: yield* Ref.make(false),
           cleanup: mcpBridge._tag === "Ready" ? mcpBridge.cleanup : Effect.void,
+          toolInputById: new Map(),
+          pendingExtensionUserInputs: new Map(),
         };
         sessions.set(input.threadId, context);
         yield* startEventPump(context);
@@ -970,6 +1220,8 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
 
       const steeringTurnId = context.activeTurnId;
       const turnId = steeringTurnId ?? TurnId.make(`${PI_TURN_ID_PREFIX}-${yield* randomUUIDv4}`);
+      const shouldQueueFollowUp =
+        steeringTurnId !== undefined || context.session.status === "running";
       const modelSelection =
         input.modelSelection ??
         (context.session.model
@@ -1000,13 +1252,13 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
         .request({
           type: "prompt",
           message: text,
-          ...(steeringTurnId ? { streamingBehavior: "steer" } : {}),
+          ...(shouldQueueFollowUp ? { streamingBehavior: "followUp" } : {}),
         })
         .pipe(
           Effect.mapError((cause) => toRequestError("prompt", cause)),
           Effect.flatMap((response) => validatePiResponse("prompt", response)),
           Effect.tapError((requestError) =>
-            steeringTurnId !== undefined
+            shouldQueueFollowUp
               ? Effect.void
               : Effect.gen(function* () {
                   yield* failActiveTurn(context, requestError.detail);
@@ -1106,6 +1358,46 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
     const rollbackThread: PiAdapterShape["rollbackThread"] = () =>
       unsupportedRequest("rollbackThread");
 
+    const respondToUserInput: PiAdapterShape["respondToUserInput"] = Effect.fn(
+      "respondToUserInput",
+    )(function* (threadId, requestId, answers) {
+      const context = ensureSessionContext(sessions, threadId);
+      const pending = context.pendingExtensionUserInputs.get(requestId);
+      if (!pending) {
+        return yield* new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "extension_ui_response",
+          detail: `Unknown pending user-input request: ${requestId}`,
+        });
+      }
+      context.pendingExtensionUserInputs.delete(requestId);
+      yield* context.rpc.send(buildPiExtensionUiResponse(pending, answers)).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "extension_ui_response",
+              detail: piRuntimeErrorDetail(cause),
+              cause,
+            }),
+        ),
+      );
+      yield* emit({
+        ...(yield* buildEventBase({
+          threadId,
+          turnId: context.activeTurnId,
+          requestId,
+          raw: {
+            source: "pi.rpc.extension_ui_response",
+            method: pending.method,
+            extensionRequestId: pending.extensionRequestId,
+          },
+        })),
+        type: "user-input.resolved",
+        payload: { answers },
+      });
+    });
+
     const stopAll: PiAdapterShape["stopAll"] = () =>
       Effect.gen(function* () {
         const contexts = [...sessions.values()];
@@ -1125,7 +1417,7 @@ export function makePiAdapter(piSettings: PiSettings, options?: PiAdapterLiveOpt
       sendTurn,
       interruptTurn,
       respondToRequest: () => unsupportedRequest("respondToRequest"),
-      respondToUserInput: () => unsupportedRequest("respondToUserInput"),
+      respondToUserInput,
       stopSession,
       listSessions,
       hasSession,

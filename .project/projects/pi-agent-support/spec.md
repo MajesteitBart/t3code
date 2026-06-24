@@ -4,7 +4,7 @@ slug: pi-agent-support
 owner: T3 Code maintainers
 status: complete
 created: 2026-06-23T10:27:50Z
-updated: 2026-06-23T21:11:20Z
+updated: 2026-06-23T23:05:55Z
 outcome: Pi can be configured, selected, and used as a T3 Code provider when the Pi RPC runtime is available, with dynamic models, provider-native thinking options, T3 in-app browser access through preview MCP tools when supported, shared composer affordances for slash commands, repo skills, and file/document mentions, correct chat rendering, and safe recovery from startup/send/discovery/browser/composer failures.
 uncertainty: high
 probe_required: true

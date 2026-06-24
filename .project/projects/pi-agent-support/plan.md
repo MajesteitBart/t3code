@@ -3,7 +3,7 @@ name: Pi Agent Support
 status: done
 lead: Bart
 created: 2026-06-23T10:27:50Z
-updated: 2026-06-23T21:11:20Z
+updated: 2026-06-23T23:05:55Z
 linear_project_id: 
 risk_level: high
 spec_status_at_plan_time: active

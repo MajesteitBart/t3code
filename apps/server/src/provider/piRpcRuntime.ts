@@ -75,6 +75,7 @@ export interface PiRpcSession {
     command: PiRpcCommand,
     options?: { readonly timeoutMs?: number },
   ) => Effect.Effect<PiRpcResponse, PiRuntimeError>;
+  readonly send: (command: PiRpcCommand) => Effect.Effect<void, PiRuntimeError>;
   readonly stop: Effect.Effect<void, never>;
 }
 
@@ -373,6 +374,18 @@ const makePiRuntime = Effect.gen(function* () {
         ).pipe(Effect.ignore),
       );
 
+      const send: PiRpcSession["send"] = (command) =>
+        Effect.gen(function* () {
+          const line = `${encodeUnknownJsonString(command)}\n`;
+          const offered = yield* Queue.offer(stdinQueue, line);
+          if (!offered) {
+            return yield* new PiRuntimeError({
+              operation: "writeRpcStdin",
+              detail: `Failed to write Pi RPC command '${command.type}': stdin queue is closed.`,
+            });
+          }
+        });
+
       const request: PiRpcSession["request"] = (command, options) =>
         Effect.gen(function* () {
           const id = command.id ?? NodeCrypto.randomUUID();
@@ -426,6 +439,7 @@ const makePiRuntime = Effect.gen(function* () {
           Effect.catchCause(() => Effect.succeed(-1)),
         ),
         request,
+        send,
         stop: stopChild,
       } satisfies PiRpcSession;
     }).pipe(

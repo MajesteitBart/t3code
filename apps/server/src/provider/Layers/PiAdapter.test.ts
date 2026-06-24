@@ -1,7 +1,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { EnvironmentId, PiSettings, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
+import {
+  ApprovalRequestId,
+  EnvironmentId,
+  PiSettings,
+  ProviderInstanceId,
+  type ProviderRuntimeEvent,
+  ThreadId,
+} from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -63,6 +71,10 @@ function makeRuntimeLayer(input: {
                 })
               );
             },
+            send: (command) =>
+              Effect.sync(() => {
+                input.commands.push(command);
+              }),
             stop: Effect.void,
           });
     },
@@ -240,6 +252,78 @@ describe("PiAdapter", () => {
         );
       }),
     ),
+  );
+
+  it.effect(
+    "queues active Pi prompts as follow-ups without clearing the active turn on failure",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const eventQueue = yield* Queue.unbounded<PiRpcEvent>();
+          const commands: Array<PiRpcCommand> = [];
+          yield* Effect.gen(function* () {
+            const adapter = yield* makePiAdapter(decodePiSettings({ enabled: true }), {
+              instanceId: ProviderInstanceId.make("pi"),
+            });
+            const eventsFiber = yield* Stream.take(adapter.streamEvents, 3).pipe(
+              Stream.runCollect,
+              Effect.forkScoped,
+            );
+
+            const threadId = ThreadId.make("pi-thread-active-follow-up");
+            yield* adapter.startSession({ threadId, runtimeMode: "auto-accept-edits" });
+            const firstTurn = yield* adapter.sendTurn({
+              threadId,
+              input: "Start a long task.",
+              attachments: [],
+            });
+            const secondTurnExit = yield* adapter
+              .sendTurn({
+                threadId,
+                input: "Queue this next.",
+                attachments: [],
+              })
+              .pipe(Effect.exit);
+
+            const events = Array.from(yield* Fiber.join(eventsFiber));
+            const session = (yield* adapter.listSessions())[0];
+            expect(Exit.isFailure(secondTurnExit)).toBe(true);
+            expect(events.map((event) => event.type)).toEqual([
+              "session.started",
+              "thread.started",
+              "turn.started",
+            ]);
+            expect(session?.status).toBe("running");
+            expect(session?.activeTurnId).toBe(firstTurn.turnId);
+            expect(commands).toMatchObject([
+              { type: "prompt", message: "Start a long task." },
+              {
+                type: "prompt",
+                message: "Queue this next.",
+                streamingBehavior: "followUp",
+              },
+            ]);
+          }).pipe(
+            Effect.provide(
+              testLayer(eventQueue, commands, {
+                request: (command) =>
+                  command.type === "prompt" && command.streamingBehavior === "followUp"
+                    ? Effect.succeed({
+                        type: "response",
+                        command: command.type,
+                        success: false,
+                        error: "Follow-up rejected.",
+                      })
+                    : Effect.succeed({
+                        type: "response",
+                        command: command.type,
+                        success: true,
+                      }),
+              }),
+            ),
+          );
+        }),
+      ),
   );
 
   it.effect("rejects attachment payloads before prompting Pi", () =>
@@ -425,6 +509,191 @@ describe("PiAdapter", () => {
             },
           });
         }).pipe(Effect.provide(testLayer(eventQueue, commands, { starts })));
+      }),
+    ),
+  );
+
+  it.effect("normalizes Pi tool args and results for detailed timeline rows", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const eventQueue = yield* Queue.unbounded<PiRpcEvent>();
+        const commands: Array<PiRpcCommand> = [];
+        yield* Effect.gen(function* () {
+          const adapter = yield* makePiAdapter(decodePiSettings({ enabled: true }), {
+            instanceId: ProviderInstanceId.make("pi"),
+          });
+          const eventsFiber = yield* Stream.take(adapter.streamEvents, 5).pipe(
+            Stream.runCollect,
+            Effect.forkScoped,
+          );
+
+          const threadId = ThreadId.make("pi-thread-tool-details");
+          yield* adapter.startSession({ threadId, runtimeMode: "auto-accept-edits" });
+          yield* adapter.sendTurn({
+            threadId,
+            input: "Run a command.",
+            attachments: [],
+          });
+          yield* Queue.offer(eventQueue, {
+            type: "tool_execution_start",
+            toolCallId: "tool-bash-1",
+            toolName: "Bash",
+            args: {
+              command: "pnpm exec vp check",
+            },
+          });
+          yield* Queue.offer(eventQueue, {
+            type: "tool_execution_end",
+            toolCallId: "tool-bash-1",
+            toolName: "Bash",
+            result: {
+              content: [{ type: "text", text: "All files are correctly formatted." }],
+              details: { exitCode: 0 },
+            },
+            isError: false,
+          });
+
+          const events = Array.from(yield* Fiber.join(eventsFiber));
+          const completed = events.find((event) => event.type === "item.completed");
+          expect(completed?.payload).toMatchObject({
+            itemType: "command_execution",
+            status: "completed",
+            title: "Bash",
+            data: {
+              toolCallId: "tool-bash-1",
+              kind: "bash",
+              command: "pnpm exec vp check",
+              rawInput: {
+                command: "pnpm exec vp check",
+              },
+              rawOutput: {
+                details: { exitCode: 0 },
+              },
+            },
+          });
+        }).pipe(Effect.provide(testLayer(eventQueue, commands)));
+      }),
+    ),
+  );
+
+  it.effect("routes Pi extension input requests through user-input responses", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const eventQueue = yield* Queue.unbounded<PiRpcEvent>();
+        const commands: Array<PiRpcCommand> = [];
+        yield* Effect.gen(function* () {
+          const adapter = yield* makePiAdapter(decodePiSettings({ enabled: true }), {
+            instanceId: ProviderInstanceId.make("pi"),
+          });
+          const requested =
+            yield* Deferred.make<Extract<ProviderRuntimeEvent, { type: "user-input.requested" }>>();
+          const resolved =
+            yield* Deferred.make<Extract<ProviderRuntimeEvent, { type: "user-input.resolved" }>>();
+          yield* adapter.streamEvents.pipe(
+            Stream.runForEach((event) => {
+              if (event.type === "user-input.requested") {
+                return Deferred.succeed(requested, event).pipe(Effect.ignore);
+              }
+              if (event.type === "user-input.resolved") {
+                return Deferred.succeed(resolved, event).pipe(Effect.ignore);
+              }
+              return Effect.void;
+            }),
+            Effect.forkScoped,
+          );
+
+          const threadId = ThreadId.make("pi-thread-extension-input");
+          yield* adapter.startSession({ threadId, runtimeMode: "auto-accept-edits" });
+          yield* adapter.sendTurn({
+            threadId,
+            input: "Ask me something.",
+            attachments: [],
+          });
+          yield* Queue.offer(eventQueue, {
+            type: "extension_ui_request",
+            id: "ui-input-1",
+            method: "input",
+            title: "What should Pi do next?",
+            placeholder: "Type your answer",
+          });
+
+          const requestedEvent = yield* Deferred.await(requested);
+          expect(requestedEvent.requestId).toBe("ui-input-1");
+          expect(requestedEvent.payload.questions).toEqual([
+            {
+              id: "input:ui-input-1",
+              header: "Question",
+              question: "What should Pi do next?",
+              options: [],
+              multiSelect: false,
+            },
+          ]);
+
+          yield* adapter.respondToUserInput(threadId, ApprovalRequestId.make("ui-input-1"), {
+            "input:ui-input-1": "Use the browser preview.",
+          });
+
+          const resolvedEvent = yield* Deferred.await(resolved);
+          expect(resolvedEvent.requestId).toBe("ui-input-1");
+          expect(resolvedEvent.payload.answers).toEqual({
+            "input:ui-input-1": "Use the browser preview.",
+          });
+          expect(commands.at(-1)).toEqual({
+            type: "extension_ui_response",
+            id: "ui-input-1",
+            value: "Use the browser preview.",
+          });
+        }).pipe(Effect.provide(testLayer(eventQueue, commands)));
+      }),
+    ),
+  );
+
+  it.effect("routes Pi extension confirm requests as boolean responses", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const eventQueue = yield* Queue.unbounded<PiRpcEvent>();
+        const commands: Array<PiRpcCommand> = [];
+        yield* Effect.gen(function* () {
+          const adapter = yield* makePiAdapter(decodePiSettings({ enabled: true }), {
+            instanceId: ProviderInstanceId.make("pi"),
+          });
+          const requested =
+            yield* Deferred.make<Extract<ProviderRuntimeEvent, { type: "user-input.requested" }>>();
+          yield* adapter.streamEvents.pipe(
+            Stream.runForEach((event) =>
+              event.type === "user-input.requested"
+                ? Deferred.succeed(requested, event).pipe(Effect.ignore)
+                : Effect.void,
+            ),
+            Effect.forkScoped,
+          );
+
+          const threadId = ThreadId.make("pi-thread-extension-confirm");
+          yield* adapter.startSession({ threadId, runtimeMode: "auto-accept-edits" });
+          yield* adapter.sendTurn({
+            threadId,
+            input: "Confirm something.",
+            attachments: [],
+          });
+          yield* Queue.offer(eventQueue, {
+            type: "extension_ui_request",
+            id: "ui-confirm-1",
+            method: "confirm",
+            title: "Continue with this plan?",
+            message: "Continue with this plan?",
+          });
+
+          yield* Deferred.await(requested);
+          yield* adapter.respondToUserInput(threadId, ApprovalRequestId.make("ui-confirm-1"), {
+            "confirm:ui-confirm-1": "Yes",
+          });
+
+          expect(commands.at(-1)).toEqual({
+            type: "extension_ui_response",
+            id: "ui-confirm-1",
+            confirmed: true,
+          });
+        }).pipe(Effect.provide(testLayer(eventQueue, commands)));
       }),
     ),
   );

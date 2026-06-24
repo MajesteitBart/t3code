@@ -47,6 +47,7 @@ function makePiRuntimeLayer(
               ],
             },
           }),
+        send: () => Effect.void,
         stop: Effect.void,
       }),
     ...overrides,

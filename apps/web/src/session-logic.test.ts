@@ -307,6 +307,46 @@ describe("derivePendingUserInputs", () => {
 
     expect(derivePendingUserInputs(activities)).toEqual([]);
   });
+
+  it("keeps freeform-only user-input prompts without options", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "user-input-freeform",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "user-input.requested",
+        summary: "User input requested",
+        tone: "info",
+        payload: {
+          requestId: "req-freeform-1",
+          questions: [
+            {
+              id: "input:req-freeform-1",
+              header: "Question",
+              question: "What should Pi do next?",
+              options: [],
+              multiSelect: false,
+            },
+          ],
+        },
+      }),
+    ];
+
+    expect(derivePendingUserInputs(activities)).toEqual([
+      {
+        requestId: "req-freeform-1",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        questions: [
+          {
+            id: "input:req-freeform-1",
+            header: "Question",
+            question: "What should Pi do next?",
+            options: [],
+            multiSelect: false,
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("deriveActivePlanState", () => {
@@ -1296,6 +1336,124 @@ describe("deriveWorkLogEntries", () => {
     });
     expect(entry?.detail).toBeUndefined();
     expect(entry?.command).toBeUndefined();
+  });
+
+  it("uses Pi Bash raw input as the visible command preview", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "pi-bash-complete",
+        createdAt: "2026-06-23T22:40:00.000Z",
+        kind: "tool.completed",
+        summary: "Bash",
+        payload: {
+          itemType: "command_execution",
+          status: "completed",
+          title: "Bash",
+          data: {
+            toolCallId: "pi-bash-1",
+            kind: "bash",
+            rawInput: {
+              command: "pnpm exec vp check",
+            },
+            rawOutput: {
+              stdout: "All files are correctly formatted.",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities);
+    expect(entry).toMatchObject({
+      id: "pi-bash-complete",
+      toolTitle: "Bash",
+      itemType: "command_execution",
+      command: "pnpm exec vp check",
+    });
+    expect(entry?.detail).toBeUndefined();
+  });
+
+  it("uses Pi Edit raw input file_path as the visible file summary", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "pi-edit-complete",
+        createdAt: "2026-06-23T22:40:01.000Z",
+        kind: "tool.completed",
+        summary: "Edit",
+        payload: {
+          itemType: "file_change",
+          status: "completed",
+          title: "Edit",
+          data: {
+            toolCallId: "pi-edit-1",
+            kind: "edit",
+            rawInput: {
+              file_path: "apps/web/src/session-logic.ts",
+              old_string: "before",
+              new_string: "after",
+            },
+          },
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities);
+    expect(entry).toMatchObject({
+      id: "pi-edit-complete",
+      toolTitle: "Edit",
+      itemType: "file_change",
+      changedFiles: ["apps/web/src/session-logic.ts"],
+    });
+  });
+
+  it("uses Pi Write raw input file_path after collapsing lifecycle rows", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "pi-write-update",
+        createdAt: "2026-06-23T22:40:02.000Z",
+        kind: "tool.updated",
+        summary: "Write",
+        payload: {
+          itemType: "file_change",
+          status: "inProgress",
+          title: "Write",
+          data: {
+            toolCallId: "pi-write-1",
+            kind: "write",
+            rawInput: {
+              file_path: "docs/providers/pi.md",
+            },
+          },
+        },
+      }),
+      makeActivity({
+        id: "pi-write-complete",
+        createdAt: "2026-06-23T22:40:03.000Z",
+        kind: "tool.completed",
+        summary: "Write",
+        payload: {
+          itemType: "file_change",
+          status: "completed",
+          title: "Write",
+          data: {
+            toolCallId: "pi-write-1",
+            kind: "write",
+            rawInput: {
+              file_path: "docs/providers/pi.md",
+            },
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      id: "pi-write-complete",
+      toolTitle: "Write",
+      itemType: "file_change",
+      changedFiles: ["docs/providers/pi.md"],
+    });
   });
 
   it("collapses legacy completed tool rows that are missing tool metadata", () => {
