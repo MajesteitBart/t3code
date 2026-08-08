@@ -1,0 +1,10 @@
+{
+  "_tag": "Exit",
+  "exit": {
+    "_tag": "Success",
+    "value": {
+      "sequence": 9007199254740991
+    }
+  },
+  "requestId": 1
+}

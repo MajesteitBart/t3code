@@ -1,0 +1,172 @@
+{
+  "fixtures": [
+    {
+      "contract": "ExecutionEnvironmentDescriptor",
+      "expectation": "accept",
+      "path": "http/environment-descriptor.json"
+    },
+    {
+      "contract": "ExecutionEnvironmentDescriptor",
+      "expectation": "accept",
+      "path": "http/environment-descriptor-omitted-optionals.json"
+    },
+    {
+      "contract": "ExecutionEnvironmentDescriptor",
+      "expectation": "accept",
+      "path": "http/environment-descriptor-unknown-fields.json"
+    },
+    {
+      "contract": "ExecutionEnvironmentDescriptor",
+      "expectation": "reject",
+      "path": "http/environment-descriptor-incompatible-enum.json"
+    },
+    {
+      "contract": "AuthAccessTokenResult",
+      "expectation": "accept",
+      "path": "http/access-token-result.json"
+    },
+    {
+      "contract": "AuthWebSocketTicketResult",
+      "expectation": "accept",
+      "path": "http/websocket-ticket-result.json"
+    },
+    {
+      "contract": "OrchestrationShellSnapshot",
+      "expectation": "accept",
+      "path": "http/shell-snapshot.json"
+    },
+    {
+      "contract": "OrchestrationThreadDetailSnapshot",
+      "expectation": "accept",
+      "path": "http/thread-snapshot.json"
+    },
+    {
+      "contract": "DispatchResult",
+      "expectation": "accept",
+      "path": "http/dispatch-result.json"
+    },
+    {
+      "contract": "EnvironmentHttpCommonError",
+      "expectation": "accept",
+      "path": "http/error-with-trace.json"
+    },
+    {
+      "contract": "ModelSelection",
+      "expectation": "accept",
+      "path": "model/model-selection.json"
+    },
+    {
+      "contract": "ModelSelection",
+      "expectation": "accept",
+      "path": "model/model-selection-legacy-alias.json"
+    },
+    {
+      "contract": "ProviderInteractionMode",
+      "expectation": "reject",
+      "path": "model/interaction-mode-incompatible.json"
+    },
+    {
+      "contract": "Effect RPC Request/orchestration.dispatchCommand",
+      "expectation": "accept",
+      "path": "rpc/request-dispatch.json"
+    },
+    {
+      "contract": "Effect RPC Request/orchestration.subscribeShell",
+      "expectation": "accept",
+      "path": "rpc/request-subscribe-shell.json"
+    },
+    {
+      "contract": "Effect RPC Ack",
+      "expectation": "accept",
+      "path": "rpc/ack.json"
+    },
+    {
+      "contract": "Effect RPC Interrupt",
+      "expectation": "accept",
+      "path": "rpc/interrupt.json"
+    },
+    {
+      "contract": "Effect RPC Ping",
+      "expectation": "accept",
+      "path": "rpc/ping.json"
+    },
+    {
+      "contract": "Effect RPC Pong",
+      "expectation": "accept",
+      "path": "rpc/pong.json"
+    },
+    {
+      "contract": "Effect RPC Chunk/OrchestrationShellStreamItem",
+      "expectation": "accept",
+      "path": "rpc/chunk-shell-snapshot.json"
+    },
+    {
+      "contract": "Effect RPC Chunk/OrchestrationShellStreamItem variants",
+      "expectation": "accept",
+      "path": "rpc/chunk-shell-variants.json"
+    },
+    {
+      "contract": "Effect RPC Chunk/OrchestrationShellStreamItem",
+      "expectation": "refresh-required",
+      "path": "rpc/chunk-unknown-shell-item.json"
+    },
+    {
+      "contract": "Effect RPC Exit.Success/DispatchResult",
+      "expectation": "accept",
+      "path": "rpc/exit-success.json"
+    },
+    {
+      "contract": "Effect RPC Exit.Failure",
+      "expectation": "accept",
+      "path": "rpc/exit-remote-failure.json"
+    },
+    {
+      "contract": "Effect RPC Defect",
+      "expectation": "accept",
+      "path": "rpc/defect.json"
+    },
+    {
+      "contract": "Effect RPC ClientProtocolError",
+      "expectation": "accept",
+      "path": "rpc/client-protocol-error.json"
+    }
+  ],
+  "inventory": {
+    "http": [
+      "GET /.well-known/t3/environment -> ExecutionEnvironmentDescriptor",
+      "POST /oauth/token -> AuthAccessTokenResult",
+      "GET /api/orchestration/shell -> OrchestrationShellSnapshot",
+      "GET /api/orchestration/threads/:threadId -> OrchestrationThreadDetailSnapshot",
+      "POST /api/orchestration/dispatch -> ClientOrchestrationCommand / DispatchResult",
+      "POST /api/auth/websocket-ticket -> AuthWebSocketTicketResult"
+    ],
+    "rpc": [
+      "orchestration.dispatchCommand -> ClientOrchestrationCommand / DispatchResult",
+      "orchestration.subscribeShell -> OrchestrationSubscribeShellInput / OrchestrationShellStreamItem"
+    ]
+  },
+  "provenance": {
+    "canonicalContracts": {
+      "algorithm": "sha256-path-lf-v1",
+      "contentHash": "f6a176a4effe12271e16d46700333c0dceea4d5ff7407bb3888713761c6d4d29",
+      "files": [
+        "packages/contracts/src/auth.ts",
+        "packages/contracts/src/baseSchemas.ts",
+        "packages/contracts/src/environment.ts",
+        "packages/contracts/src/environmentHttp.ts",
+        "packages/contracts/src/model.ts",
+        "packages/contracts/src/orchestration.ts",
+        "packages/contracts/src/providerInstance.ts",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "revision": "a8cd2ad2ebb32ad789e8e0ecd2fc713c2edc38f4"
+    },
+    "effectRpc": {
+      "algorithm": "sha256-bytes-v1",
+      "contentHash": "9d053f2f2f230cb8764a7888097e36034d68293aa3407125a5cd07e66a0e1ecd",
+      "source": "effect/src/unstable/rpc/RpcMessage.ts",
+      "version": "4.0.0-beta.103"
+    }
+  },
+  "schemaVersion": 1
+}

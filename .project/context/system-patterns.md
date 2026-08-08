@@ -12,6 +12,8 @@ The server decider produces persisted events; projectors derive read models. Com
 
 One transport attempt does not own retry policy. Supervisors handle environment lifecycle, backoff, reachability, resubscription, last-known data, and active/passive connection behavior. Multi-environment identifiers must be scoped to prevent collisions.
 
+Native Android now makes that boundary executable: `OneAttemptHttpClient` disables retry/redirect replay, and `TicketedRpcSession` owns one ticket/socket generation, sent-versus-unsent classification, current-generation cancellation, and terminal closure. WS-C may construct replacement sessions and recreate only long-lived intent; the transport never reconnects, backs off, replays sent unary work, or resubscribes one-shot work.
+
 ## Thin UI, Explicit Native Adapter
 
 Transport, authentication, persistence, retry, and domain state remain outside composables/views. The SwiftUI app uses `FeatureClient`; web and React Native use `packages/client-runtime`. Native Android should define a similarly testable boundary and avoid a single adapter object accumulating unrelated feature logic.
@@ -19,6 +21,8 @@ Transport, authentication, persistence, retry, and domain state remain outside c
 ## Contract Conformance Without Dual Truth
 
 `packages/contracts` is canonical. Native clients necessarily model the wire shape in their language, but conformance fixtures should be derived from or checked against canonical TypeScript schemas. Hand-copied Kotlin models are not a second contract authority.
+
+The native Android fixture manifest records the last Git revision touching the exact canonical source set, a normalized content hash, and the installed Effect RPC source hash. `foundationContractConformance` fails when those sources and committed fixtures drift.
 
 ## Platform-Native Outcome Parity
 

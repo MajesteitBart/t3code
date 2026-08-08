@@ -1,0 +1,18 @@
+{
+  "capabilities": {
+    "connectionProbe": true,
+    "futureCapability": true,
+    "repositoryIdentity": true,
+    "threadSettlement": false
+  },
+  "environmentId": "environment-fixture",
+  "futureDescriptorField": {
+    "enabled": true
+  },
+  "label": "Fixture environment",
+  "platform": {
+    "arch": "x64",
+    "os": "linux"
+  },
+  "serverVersion": "0.0.0-fixture"
+}

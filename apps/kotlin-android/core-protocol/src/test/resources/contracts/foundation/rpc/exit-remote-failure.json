@@ -1,0 +1,16 @@
+{
+  "_tag": "Exit",
+  "exit": {
+    "_tag": "Failure",
+    "cause": [
+      {
+        "_tag": "Fail",
+        "error": {
+          "_tag": "OrchestrationGetSnapshotError",
+          "message": "Synthetic fixture rejection"
+        }
+      }
+    ]
+  },
+  "requestId": 2
+}

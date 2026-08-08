@@ -1,0 +1,11 @@
+{
+  "_tag": "Request",
+  "headers": [],
+  "id": 1,
+  "payload": {
+    "commandId": "command-fixture",
+    "threadId": "thread-fixture",
+    "type": "thread.archive"
+  },
+  "tag": "orchestration.dispatchCommand"
+}

@@ -59,11 +59,32 @@ fun registerReservedGate(name: String, owner: String, purpose: String) {
   }
 }
 
-registerReservedGate(
-  name = "foundationContractConformance",
-  owner = "T-005",
-  purpose = "AC-007 canonical contract provenance and drift checks",
-)
+val repositoryRoot = rootProject.layout.projectDirectory.dir("../..")
+
+tasks.register<Exec>("verifyNativeAndroidContractFixtures") {
+  group = "verification"
+  description = "Checks native Android fixtures against canonical TypeScript and Effect RPC sources."
+  workingDir(repositoryRoot)
+  commandLine("node", "scripts/export-native-android-contract-fixtures.ts", "--check")
+  outputs.upToDateWhen { false }
+}
+
+tasks.register("foundationContractConformance") {
+  group = "verification"
+  description = "Runs canonical fixture drift checks and Kotlin contract decoding tests."
+  dependsOn(
+    "verifyNativeAndroidContractFixtures",
+    ":core-protocol:testDebugUnitTest",
+    ":core-protocol:testReleaseUnitTest",
+  )
+}
+
+tasks.register("foundationTransportIntegration") {
+  group = "verification"
+  description = "Runs deterministic transport races and the real OkHttp compressed WebSocket round trip."
+  dependsOn("verifyNativeAndroidContractFixtures", ":core-protocol:testDebugUnitTest")
+}
+
 registerReservedGate(
   name = "foundationIntegration",
   owner = "T-017",

@@ -4,6 +4,7 @@
 
 - On 2026-08-07, the user selected Option 1 from the Android analysis: a standalone native Android client equivalent in architecture and capability to the SwiftUI experiment.
 - The initial setup request authorized planning artifacts only. On 2026-08-08, the user separately authorized full WS-A implementation, focused Gradle/build and emulator evidence, a commit, and a push of the current branch; the user explicitly prohibited opening a pull request.
+- On 2026-08-08, the user separately authorized full WS-B contracts/transport implementation, real Gradle/contract/integration evidence, a commit, and a push of the current branch; the user again explicitly prohibited a pull request.
 
 ## Primary Reference
 

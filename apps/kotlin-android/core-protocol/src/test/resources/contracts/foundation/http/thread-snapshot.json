@@ -1,0 +1,38 @@
+{
+  "snapshotSequence": 9007199254740991,
+  "thread": {
+    "activities": [],
+    "archivedAt": null,
+    "branch": "main",
+    "checkpoints": [],
+    "createdAt": "2026-08-08T00:00:00.000Z",
+    "deletedAt": null,
+    "id": "thread-fixture",
+    "interactionMode": "default",
+    "latestTurn": null,
+    "messages": [
+      {
+        "createdAt": "2026-08-08T00:00:00.000Z",
+        "id": "message-fixture",
+        "role": "user",
+        "streaming": false,
+        "text": "Synthetic fixture message",
+        "turnId": "turn-fixture",
+        "updatedAt": "2026-08-08T00:00:00.000Z"
+      }
+    ],
+    "modelSelection": {
+      "model": "fixture-model",
+      "provider": "codex"
+    },
+    "projectId": "project-fixture",
+    "proposedPlans": [],
+    "runtimeMode": "full-access",
+    "session": null,
+    "settledAt": null,
+    "settledOverride": null,
+    "title": "Fixture thread",
+    "updatedAt": "2026-08-08T00:00:00.000Z",
+    "worktreePath": null
+  }
+}

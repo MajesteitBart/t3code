@@ -1,0 +1,11 @@
+{
+  "_tag": "ClientProtocolError",
+  "error": {
+    "_tag": "RpcClientError",
+    "reason": {
+      "_tag": "RpcClientDefect",
+      "cause": "Synthetic fixture cause",
+      "message": "Synthetic fixture protocol error"
+    }
+  }
+}

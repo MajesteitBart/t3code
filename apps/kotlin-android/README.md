@@ -11,6 +11,8 @@ This is the standalone Kotlin/Jetpack Compose client. Its Gradle build is indepe
 
 The checked-in Gradle 8.13 wrapper downloads its distribution from Gradle and verifies the pinned SHA-256 checksum. No machine-installed Gradle, Node workspace install, Expo process, signing credential, pairing code, or T3 home directory is required. `foundationAssemble` produces an unsigned release-shaped APK; release signing remains follow-on release work.
 
+The contract-conformance command is the one exception: it also requires the repository's Node 24/pnpm workspace install because it verifies checked-in Kotlin fixtures against the live canonical TypeScript schemas and installed Effect RPC protocol.
+
 On Windows PowerShell, use `./gradlew.bat`; on macOS/Linux, substitute `./gradlew`.
 
 ## Focused commands
@@ -28,6 +30,12 @@ cd apps/kotlin-android
 # Run warnings-as-errors Android lint for every module and both variants.
 ./gradlew.bat foundationStaticCheck
 
+# Verify canonical TypeScript/Effect provenance and Kotlin contract decoding.
+./gradlew.bat foundationContractConformance
+
+# Run transport races plus a real compressed OkHttp WebSocket round trip.
+./gradlew.bat foundationTransportIntegration
+
 # Install only the development variant on the selected connected device.
 ./gradlew.bat foundationInstallDevelopment
 
@@ -42,9 +50,6 @@ These tasks are deliberately native-Android-only. They do not invoke the reposit
 The following stable command names resolve today but intentionally fail closed until their owning task replaces the placeholder with real evidence. Listing or dry-running a task is not evidence that its gate passes.
 
 ```powershell
-# T-005: AC-007 canonical TypeScript contract provenance and drift.
-./gradlew.bat foundationContractConformance
-
 # T-017: disposable, isolated T3 server integration harness.
 ./gradlew.bat foundationIntegration
 
@@ -65,6 +70,6 @@ Future integration helpers must require an explicitly isolated home and port, pr
 ./gradlew.bat tasks --group install
 ./gradlew.bat tasks --group verification
 
-# Resolve every reserved gate without running its fail-closed action.
-./gradlew.bat foundationContractConformance foundationIntegration foundationAccessibility foundationPerformance --dry-run
+# Resolve every still-reserved gate without running its fail-closed action.
+./gradlew.bat foundationIntegration foundationAccessibility foundationPerformance --dry-run
 ```

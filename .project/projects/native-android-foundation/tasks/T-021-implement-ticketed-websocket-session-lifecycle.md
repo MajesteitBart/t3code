@@ -1,10 +1,10 @@
 ---
 id: T-021
 name: Implement ticketed WebSocket session lifecycle
-status: planned
+status: done
 workstream: WS-B
 created: 2026-08-08T10:32:25Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T14:08:26Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -26,10 +26,10 @@ Build the one-attempt ticketed WebSocket session lifecycle around the Effect RPC
 
 ## Acceptance Criteria
 
-- [ ] Each connection attempt mints a fresh one-use WebSocket ticket and redacts it from URLs in logs and evidence.
-- [ ] Sent unary calls fail as ambiguous on disconnect and are never replayed; provably unsent calls may fail as connectionUnavailable after a bounded configurable wait.
-- [ ] Cancellation sends Interrupt only while the request still belongs to the current session, and one-shot streams fail rather than resubscribe.
-- [ ] The session exposes closure once, releases resources deterministically, and performs no internal reconnect or backoff.
+- [x] Each connection attempt mints a fresh one-use WebSocket ticket and redacts it from URLs in logs and evidence.
+- [x] Sent unary calls fail as ambiguous on disconnect and are never replayed; provably unsent calls may fail as connectionUnavailable after a bounded configurable wait.
+- [x] Cancellation sends Interrupt only while the request still belongs to the current session, and one-shot streams fail rather than resubscribe.
+- [x] The session exposes closure once, releases resources deterministically, and performs no internal reconnect or backoff.
 
 ## Traceability
 
@@ -47,11 +47,21 @@ Build the one-attempt ticketed WebSocket session lifecycle around the Effect RPC
 
 ## Definition of Done
 
-- [ ] Implementation complete
-- [ ] Tests pass
-- [ ] Review complete
-- [ ] Docs updated
+- [x] Implementation complete
+- [x] Tests pass
+- [x] Review complete
+- [x] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T14:08:26Z: TicketedRpcSessionTest passes for fresh ticket/redaction, bounded unsent wait, sent ambiguity/no replay, current-generation Interrupt, terminal one-shot stream, Ack-after-consumption, Ping/Pong, closure-once, and one connector attempt; debug/release tests and lint pass.
+
+- 2026-08-08T14:08:00Z: Acceptance verified by `TicketedRpcSessionTest`: two factory starts mint distinct tickets while public endpoint/toString values remain redacted; an unsent request waits exactly the configured virtual deadline; sent work disconnects as ambiguous with one Request and one connector invocation; cancellation sends one generation-owned Interrupt; consumed chunks send Ack; a one-shot stream fails terminally; application Ping/Pong stays on the same attempt; repeated close completes one closure and calls resource close once.
+
+- 2026-08-08T14:08:00Z: Definition of Done verified. The serialized callback queue and request maps install ownership before sends, invalidate all ownership on terminal closure, and contain no retry, reconnect, resubscribe, or backoff path. The default OkHttp connector enforces disabled retry and redirects; handshake failure causes discard ticket-bearing details. Boundaries are documented in `core-protocol/CONTRACTS.md`. `./gradlew.bat :core-protocol:testDebugUnitTest :core-protocol:testReleaseUnitTest :core-protocol:lintDebug :core-protocol:lintRelease --no-daemon` passed.
+
+- 2026-08-08T13:58:10Z: Implement one-attempt ticketed WebSocket lifecycle with generation-scoped cancellation and no retry policy.
+
+- 2026-08-08T13:58:06Z: T-006 and T-007 are done; the typed HTTP ticket client and transport-independent RPC codec are verified.
 
 - 2026-08-08T10:32:25Z: Created from .project/templates/task.md by `delano task add`.

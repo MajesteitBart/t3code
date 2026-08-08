@@ -1,0 +1,14 @@
+{
+  "capabilities": {
+    "connectionProbe": true,
+    "repositoryIdentity": true,
+    "threadSettlement": false
+  },
+  "environmentId": "environment-fixture",
+  "label": "Fixture environment",
+  "platform": {
+    "arch": "x64",
+    "os": "android"
+  },
+  "serverVersion": "0.0.0-fixture"
+}

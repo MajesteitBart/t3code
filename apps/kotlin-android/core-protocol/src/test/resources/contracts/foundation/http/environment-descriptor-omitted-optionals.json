@@ -1,0 +1,10 @@
+{
+  "capabilities": {},
+  "environmentId": "environment-minimal",
+  "label": "Minimal fixture environment",
+  "platform": {
+    "arch": "other",
+    "os": "unknown"
+  },
+  "serverVersion": "0.0.0-fixture"
+}

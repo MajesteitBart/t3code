@@ -1,0 +1,7 @@
+{
+  "access_token": "<redacted>",
+  "expires_in": 3600,
+  "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+  "scope": "orchestration:read orchestration:operate",
+  "token_type": "Bearer"
+}

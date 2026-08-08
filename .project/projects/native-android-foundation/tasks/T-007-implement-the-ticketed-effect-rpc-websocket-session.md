@@ -1,10 +1,10 @@
 ---
 id: T-007
 name: Implement Effect RPC framing and codecs
-status: planned
+status: done
 workstream: WS-B
 created: 2026-08-07T13:16:56Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T13:53:49Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -26,11 +26,11 @@ Implement transport-independent Effect RPC request/control/response codecs and t
 
 ## Acceptance Criteria
 
-- [ ] Request fixtures encode `_tag=Request`, monotonic integer `id`, method `tag`, payload, and exactly `headers: []` when no headers exist.
-- [ ] Control/response fixtures cover `Ping`, `Pong`, `Ack {requestId}`, `Interrupt {requestId}`, `Chunk {requestId,values}`, `Exit`, `Defect`, and `ClientProtocolError` with typed remote/protocol errors.
-- [ ] Foundation unary/subscription payloads and shell stream variants decode canonical fixtures with 64-bit sequence fidelity and no `Double` bridge.
-- [ ] Unknown stream variants produce the explicit refresh-required result consumed by T-022 rather than an unsafe partial mutation.
-- [ ] Codec tests run without a network and fail through the AC-007 focused conformance command when canonical source changes.
+- [x] Request fixtures encode `_tag=Request`, monotonic integer `id`, method `tag`, payload, and exactly `headers: []` when no headers exist.
+- [x] Control/response fixtures cover `Ping`, `Pong`, `Ack {requestId}`, `Interrupt {requestId}`, `Chunk {requestId,values}`, `Exit`, `Defect`, and `ClientProtocolError` with typed remote/protocol errors.
+- [x] Foundation unary/subscription payloads and shell stream variants decode canonical fixtures with 64-bit sequence fidelity and no `Double` bridge.
+- [x] Unknown stream variants produce the explicit refresh-required result consumed by T-022 rather than an unsafe partial mutation.
+- [x] Codec tests run without a network and fail through the AC-007 focused conformance command when canonical source changes.
 
 ## Traceability
 
@@ -47,11 +47,21 @@ Implement transport-independent Effect RPC request/control/response codecs and t
 
 ## Definition of Done
 
-- [ ] Implementation complete
-- [ ] Tests pass
-- [ ] Review complete
-- [ ] Docs updated
+- [x] Implementation complete
+- [x] Tests pass
+- [x] Review complete
+- [x] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T13:53:49Z: foundationContractConformance and debug/release core-protocol lint pass; EffectRpcCodecTest covers exact empty headers, monotonic IDs, all required frame tags, typed errors, all shell variants, 64-bit sequences, and refresh-required fallback without network access.
+
+- 2026-08-08T13:53:25Z: Acceptance verified by `EffectRpcCodecTest`: canonical dispatch/subscription envelopes compare structurally with exact empty headers and monotonic IDs; every control/response tag decodes; remote Exit and fatal protocol failures remain distinct typed failures; all six TypeScript-validated shell variants preserve `Long` values through `Number.MAX_SAFE_INTEGER`; a future kind returns `RefreshRequired`; malformed values fail closed.
+
+- 2026-08-08T13:53:25Z: Definition of Done verified. `EffectRpcCodec` contains no OkHttp, coroutine, retry, timeout, reconnect, or lifecycle behavior and its boundary is documented in `core-protocol/CONTRACTS.md`. `./gradlew.bat foundationContractConformance :core-protocol:lintDebug :core-protocol:lintRelease --no-daemon` passed, including both build variants and the 27-file source-provenance drift check; `pnpm exec vp run --filter @t3tools/scripts typecheck` passed.
+
+- 2026-08-08T13:47:15Z: Implement the transport-independent Effect RPC framing and bounded foundation codecs against canonical fixtures.
+
+- 2026-08-08T13:47:13Z: T-005 is done and canonical RPC fixtures/provenance are available; T-007 is dependency-safe.
 
 - 2026-08-07T13:16:56Z: Created from .project/templates/task.md by `delano task add`.

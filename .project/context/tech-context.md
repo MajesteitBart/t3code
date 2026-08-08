@@ -24,11 +24,13 @@ cd apps/kotlin-android
 ./gradlew.bat foundationAssemble
 ./gradlew.bat foundationUnitTest
 ./gradlew.bat foundationStaticCheck
+./gradlew.bat foundationContractConformance
+./gradlew.bat foundationTransportIntegration
 ./gradlew.bat foundationInstallDevelopment
 ./gradlew.bat foundationInstrumentation
 ```
 
-Do not run repo-wide checks unless explicitly requested. Native Android build, unit, static/lint, install, and instrumentation entry points are live. Contract, integration, accessibility, and performance entry points are reserved fail-closed tasks until T-005, T-017, T-016, and T-018 replace them with evidence.
+Do not run repo-wide checks unless explicitly requested. Native Android build, unit, static/lint, contract-conformance, transport-integration, install, and instrumentation entry points are live. The disposable real-server integration, accessibility, and performance entry points remain reserved fail-closed tasks until T-017, T-016, and T-018 replace them with evidence.
 
 ## Runtime Constraints
 
@@ -45,6 +47,6 @@ Do not run repo-wide checks unless explicitly requested. Native Android build, u
 - `apps/server`: authentication, transport, event sourcing, provider adapters, Git, files, terminals, and checkpoints.
 - `apps/swift-ios`: behavioral and native-client reference for the Android initiative.
 - `apps/mobile/modules`: existing Android implementations audited in D-015. Review-diff/composer may later be adapted behind thin Expo adapters; terminal and native controls are deferred for the recorded reasons.
-- `apps/kotlin-android`: independent Compose application and the stable Android build/test command surface.
+- `apps/kotlin-android`: independent Compose application and stable Android command surface; `core-protocol/CONTRACTS.md` records the canonical subset, provenance, and retry/cancellation ownership boundary.
 - Clerk and the T3 relay: account authentication and managed environments.
 - APNs today; FCM parity requires contract, relay persistence, and delivery changes rather than a client-only patch.

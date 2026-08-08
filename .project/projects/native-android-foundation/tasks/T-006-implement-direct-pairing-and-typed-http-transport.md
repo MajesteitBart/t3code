@@ -1,10 +1,10 @@
 ---
 id: T-006
 name: Implement direct pairing and typed HTTP transport
-status: planned
+status: done
 workstream: WS-B
 created: 2026-08-07T13:16:56Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T13:46:44Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -26,12 +26,12 @@ Implement pairing URL parsing, target-SDK-aware endpoint probing, RFC 8693 one-t
 
 ## Acceptance Criteria
 
-- [ ] Canonical URL, loose host/code, bare-host, and `t3code://pair?pairingUrl=...` forms parse deterministically; fragment token wins over query, and one input derives HTTP plus WebSocket bases.
-- [ ] Valid input performs the public descriptor read and exact RFC 8693 form exchange with `client_device_type=mobile`, `client_os=Android`, optional Android label, and strict direct `issued_token_type`/`token_type=Bearer` validation.
-- [ ] Malformed, authorization-rejected, local-network-permission-denied when applicable, unreachable, timeout, cancelled, server-rejected, and transport cases map to tested layered failures that preserve status/reason/message/`traceId` without secrets.
-- [ ] One-time pairing credentials are not written to disk or emitted in logs.
-- [ ] HTTP calls expose one logical attempt and contain no application retry/backoff loop; the selected client is configured/tested so side-effecting requests are not silently replayed.
-- [ ] A controlled gzip response is advertised/decoded using the selected client's transparent-compression behavior without assuming an explicit application `Accept-Encoding` header.
+- [x] Canonical URL, loose host/code, bare-host, and `t3code://pair?pairingUrl=...` forms parse deterministically; fragment token wins over query, and one input derives HTTP plus WebSocket bases.
+- [x] Valid input performs the public descriptor read and exact RFC 8693 form exchange with `client_device_type=mobile`, `client_os=Android`, optional Android label, and strict direct `issued_token_type`/`token_type=Bearer` validation.
+- [x] Malformed, authorization-rejected, local-network-permission-denied when applicable, unreachable, timeout, cancelled, server-rejected, and transport cases map to tested layered failures that preserve status/reason/message/`traceId` without secrets.
+- [x] One-time pairing credentials are not written to disk or emitted in logs.
+- [x] HTTP calls expose one logical attempt and contain no application retry/backoff loop; the selected client is configured/tested so side-effecting requests are not silently replayed.
+- [x] A controlled gzip response is advertised/decoded using the selected client's transparent-compression behavior without assuming an explicit application `Accept-Encoding` header.
 
 ## Traceability
 
@@ -50,11 +50,21 @@ Implement pairing URL parsing, target-SDK-aware endpoint probing, RFC 8693 one-t
 
 ## Definition of Done
 
-- [ ] Implementation complete
-- [ ] Tests pass
-- [ ] Review complete
-- [ ] Docs updated
+- [x] Implementation complete
+- [x] Tests pass
+- [x] Review complete
+- [x] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T13:46:44Z: PairingUrlTest and EnvironmentHttpClientTest pass for debug/release; core-protocol lint passes for debug/release; exact RFC 8693 exchange, gzip, redacted layered failures, disabled retry/redirects, and exact-call cancellation are verified.
+
+- 2026-08-08T13:45:58Z: Acceptance verified in `PairingUrlTest` and `EnvironmentHttpClientTest`: all four input grammars, fragment precedence, HTTP/WS derivation, exact two-request pairing flow and RFC 8693 form, strict bearer validation, transparent gzip, typed/redacted failures, one-request redirect behavior, and cancellation of the exact in-flight call. `OneAttemptHttpClient` enforces `retryOnConnectionFailure=false` and disabled redirects; it contains no retry, backoff, persistence, or logging path.
+
+- 2026-08-08T13:45:58Z: Definition of Done verified. Production implementation is under `core-protocol/src/main`; contract/transport boundaries are documented in `core-protocol/CONTRACTS.md`; review corrected the API-33-only URL decoder overload for min SDK 24. `./gradlew.bat :core-protocol:testDebugUnitTest :core-protocol:testReleaseUnitTest :core-protocol:lintDebug :core-protocol:lintRelease --no-daemon` completed successfully.
+
+- 2026-08-08T13:35:39Z: Implement deterministic pairing parsing, direct RFC 8693 exchange, typed one-attempt HTTP calls, cancellation, redaction, and transparent gzip proof without persistence or retry policy.
+
+- 2026-08-08T13:35:38Z: Readiness reviewed: T-005 is done; canonical HTTP fixtures and provenance pass; pairing, auth endpoint, OkHttp, Android LAN-classification, and failure-boundary references are available.
 
 - 2026-08-07T13:16:56Z: Created from .project/templates/task.md by `delano task add`.
