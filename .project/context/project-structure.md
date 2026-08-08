@@ -18,7 +18,7 @@
 - `apps/desktop`: Electron wrapper and desktop behavior.
 - `apps/mobile`: React Native iOS/Android client and existing platform-native modules.
 - `apps/swift-ios`: standalone native SwiftUI client.
-- Proposed `apps/kotlin-android`: working location for the standalone native Android client; final naming is an explicit project decision.
+- `apps/kotlin-android`: standalone native Android Gradle build with `app`, `core-protocol`, `core-data`, and `core-testing`; its README owns focused build/test/install commands.
 - `packages/contracts`: wire contracts.
 - `packages/client-runtime`: nonvisual TypeScript client behavior for web and React Native.
 - `packages/shared`: small shared runtime utilities.

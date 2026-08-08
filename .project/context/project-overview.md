@@ -9,7 +9,7 @@ T3 Code is an open control surface for coding-agent providers. One T3 server own
 - `apps/web`: browser client, also wrapped by `apps/desktop`.
 - `apps/mobile`: React Native client for Android and iOS.
 - `apps/swift-ios`: separate native SwiftUI client introduced by PR #5178.
-- Planned native Android client: a separate Kotlin/Jetpack Compose counterpart to `apps/swift-ios`, not a rewrite of the React Native Android client.
+- `apps/kotlin-android`: the new standalone Kotlin/Jetpack Compose foundation, separately identified from the React Native Android client and not a replacement for it.
 
 ## Delivery Scopes
 
@@ -19,6 +19,6 @@ T3 Code is an open control surface for coding-agent providers. One T3 server own
 ## Current Health
 
 - The Delano runtime is installed and the context pack has been converted from placeholders to repository-specific guidance.
-- The checked-out source is the experimental SwiftUI PR branch, providing the reference implementation for native-client parity.
-- The existing React Native Android client already contains useful Kotlin native modules for terminal, review diff, composer, and controls; reuse boundaries require an explicit architecture task.
-- A native Android application does not exist yet. Build commands, package identities, minimum SDK, release ownership, and push-provider scope must be decided before implementation.
+- The repository still contains the experimental SwiftUI PR source as a behavioral reference; it is not the canonical Android contract or a shipped client.
+- Native Android WS-A is done. D-015 allows later adapter-first review-diff/composer work, defers the Ghostty/JNI terminal pending its native supply-chain gates, and selects Compose-native replacement for Expo-specific controls.
+- The native app now builds debug/release-shaped variants with collision-safe identities and renders on the supported API-35 phone emulator. Later workstreams still own protocol, persistence, product shell, CI, release, and push-provider scope.

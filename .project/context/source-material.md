@@ -3,7 +3,7 @@
 ## User Direction
 
 - On 2026-08-07, the user selected Option 1 from the Android analysis: a standalone native Android client equivalent in architecture and capability to the SwiftUI experiment.
-- The user requested Delano installation, durable context, and the first native Android delivery project. This request authorizes local planning artifacts, not implementation, commits, pushes, PRs, deployments, or store actions.
+- The initial setup request authorized planning artifacts only. On 2026-08-08, the user separately authorized full WS-A implementation, focused Gradle/build and emulator evidence, a commit, and a push of the current branch; the user explicitly prohibited opening a pull request.
 
 ## Primary Reference
 
@@ -33,3 +33,4 @@
 - Foundation's highest risks are contract drift, sent-versus-unsent replay safety, active/passive state ownership, compensated credential/catalog persistence, target-SDK local-network privacy, and reviewability. DPoP/push remain later-project risks.
 - Delivery should be vertical and incremental; copying the Swift file structure or its largest adapter one-to-one is not an architecture plan.
 - Transfer canonical wire shapes and cross-client invariants; do not transfer Swift timers, actor mechanisms, full feature scope, or iOS visual constants without Android evidence.
+- T-004 measured the existing Kotlin boundaries: review-diff and composer are adapter-first `adapt` candidates; terminal is deferred behind Ghostty/JNI/toolchain/ABI gates; native controls should be implemented directly in Compose. D-015 is the canonical audit result.

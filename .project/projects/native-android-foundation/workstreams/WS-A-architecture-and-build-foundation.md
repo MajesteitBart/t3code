@@ -2,9 +2,9 @@
 id: WS-A
 name: WS-A Architecture and Build Foundation
 owner: team
-status: planned
+status: done
 created: 2026-08-07T13:12:09Z
-updated: 2026-08-07T13:12:21Z
+updated: 2026-08-08T13:05:09Z
 operating_mode: multi-stream
 ---
 
@@ -17,7 +17,7 @@ Turn the provisional native-client direction into an independently buildable, se
 ## Owned Files/Areas
 
 - `.project/projects/native-android-foundation/decisions.md`
-- Proposed `apps/kotlin-android/settings.gradle.kts`, root build files, version catalog, Gradle wrapper, and `app/`
+- `apps/kotlin-android/settings.gradle.kts`, root build files, version catalog, Gradle wrapper, and `app/`
 - Native Android build/run documentation and focused root task wiring
 - Package identities, manifests, resource names, target-SDK local-network permission policy, owned-host/custom-scheme intent filters, and application composition root
 
@@ -36,8 +36,8 @@ Turn the provisional native-client direction into an independently buildable, se
 
 ## Handoff Criteria
 
-- Toolchain, directory, package, SDK, and module decisions are recorded with evidence.
-- Debug and release-shaped variants build from focused commands and install beside React Native Android.
-- The manifest claims only the approved custom scheme and verified owned web hosts; arbitrary server URLs remain explicit onboarding input.
-- The composition root is thin and no feature constructs transport/persistence directly.
-- Other workstreams have stable module/package locations and test entry points.
+- [x] Toolchain, directory, package, SDK, and module decisions are recorded with evidence.
+- [x] Debug and release-shaped variants build from focused commands and install beside React Native Android.
+- [x] The manifest claims only the approved custom scheme and verified owned web hosts; arbitrary server URLs remain explicit onboarding input.
+- [x] The composition root is thin and no feature constructs transport/persistence directly.
+- [x] Other workstreams have stable module/package locations and test entry points.

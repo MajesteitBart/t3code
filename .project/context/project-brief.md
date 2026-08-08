@@ -10,7 +10,7 @@ Delano is being used to turn the native Android choice into explicit architectur
 
 Create a separately installable Kotlin/Jetpack Compose T3 client that connects to existing T3 servers directly and through supported remote modes, reproduces the approved native-client capabilities in staged vertical increments, and coexists with `apps/mobile` without regressing existing clients or contracts.
 
-Planning success means the first native Android project has:
+The initial planning baseline established:
 
 - an approved measurable spec and explicit non-goals;
 - justified architecture and reuse boundaries;
@@ -34,3 +34,5 @@ Out of scope for the planning bootstrap:
 - Rebasing or modifying PR #5178.
 - Public releases, store submissions, deployments, or new external tracker artifacts.
 - Claiming exact visual identity with SwiftUI where Android conventions provide a clearer native behavior.
+
+The planning bootstrap is complete. The 2026-08-08 delivery request superseded the implementation restriction only for WS-A, which now provides the independently buildable application foundation; the remaining scope still requires dependency-safe task authorization.

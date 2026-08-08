@@ -4,7 +4,7 @@ name: Run the foundation gate and scope follow-on projects
 status: planned
 workstream: WS-E
 created: 2026-08-07T13:17:03Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T12:55:30Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -42,6 +42,7 @@ Review outcome evidence, unresolved risks, performance, contract/lifecycle relia
 - Candidate project families, pending discovery and gate outcome: (1) chat/transcript/composer plus new-task bootstrap recovery; (2) daily UX/shelf policy and task creation; (3) T3 Connect/DPoP plus Android relay/FCM server prerequisites; (4) platform integrations such as deep navigation, share, shortcuts, notifications, background work, haptics, and Glance/ongoing status; (5) workspace files/review/source-control/terminal tools; (6) release/signing/store operations.
 - Preserve useful Swift evidence (pagination/viewport tests, reducer cases, write fencing, offline outbox, platform route mailbox) as research inputs. Do not preapprove its parser/cache choices, throttle/backoff constants, attachment limits, iOS visual tokens, or task decomposition.
 - The next project receives one measurable outcome and non-goals only after the foundation gate; listing candidates here is not activation.
+- T-004 reuse handoff: review-diff and composer are adapter-first `adapt` candidates only; retain their thin Expo modules and require the focused React Native compatibility checks, license handling, and performance baselines recorded in D-015. Terminal remains deferred until an approved project owns NDK/CMake/Zig/Ghostty supply-chain, four-ABI, 16-KiB-page, and RN adapter validation. Native controls should be replaced natively in Compose, not extracted. This note records prerequisites only and does not activate or decompose a follow-on project.
 
 ## Definition of Done
 
@@ -51,5 +52,7 @@ Review outcome evidence, unresolved risks, performance, contract/lifecycle relia
 - [ ] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T12:55:30Z: T-004 recorded reuse prerequisites in D-015: adapter-first review/composer candidates, terminal supply-chain and ABI gates, and Compose-native controls replacement; this does not activate follow-on work.
 
 - 2026-08-07T13:17:03Z: Created from .project/templates/task.md by `delano task add`.

@@ -3,7 +3,7 @@ name: Native Android Client Foundation
 slug: native-android-foundation
 owner: team
 created: 2026-08-07T13:09:35Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T13:05:09Z
 ---
 
 # Decisions: Native Android Client Foundation
@@ -67,16 +67,48 @@ updated: 2026-08-08T10:32:44Z
 - Rationale: domain trust governs which web origins may inject an app route, not which user-supplied T3 servers may be paired.
 - Consequence: target-SDK local-network permissions and owned-host App Link availability are resolved in T-001/T-002. Foundation accepts QR payload text; CameraX scanning remains follow-on scope.
 
+### D-011 — Freeze the foundation toolchain on the API 36 compatibility line
+
+- Decision: create the standalone project at `apps/kotlin-android` with `minSdk 24`, `targetSdk 36`, `compileSdk 36`, SDK Build Tools `35.0.0`, Java 17 bytecode/toolchain, Gradle `8.13`, Android Gradle Plugin `8.13.2`, Kotlin/Compose compiler plugin `2.3.21`, Compose BOM `2026.06.01`, Activity Compose `1.13.0`, and Lifecycle Runtime Compose `2.10.0`.
+- Rationale: the checked developer environment has Temurin 17.0.19, Android platforms 34/35/36, Build Tools 35.0.0/36.0.0, and an API 35 Google APIs emulator. Expo SDK 56 also supports Android 7+ and compiles/targets API 36, so `minSdk 24` and API 36 preserve compatibility with the existing React Native native-module boundary without making the new app depend on Expo. AGP 8.13.2 is the last pre-built-in-Kotlin line, supports API 36.1, requires Gradle 8.13/JDK 17, and carries the R8 version required for Kotlin 2.3. Sources: `apps/mobile/app.config.ts`, `apps/mobile/modules/*/android/build.gradle`, `.github/workflows/ci.yml`, [Expo SDK 56 platform matrix](https://docs.expo.dev/versions/v56.0.0/), [AGP 8.13 compatibility](https://developer.android.com/build/releases/agp-8-13-0-release-notes), [AGP/Kotlin compatibility](https://developer.android.com/build/kotlin-support), and [Compose setup](https://developer.android.com/develop/ui/compose/setup-compose-dependencies-and-compiler).
+- CI consequence: existing repository CI provisions Node/Rust and mobile EAS jobs delegate Android builds to Expo; it does not provision a standalone Android SDK/Gradle job. WS-E must add an explicit native-Android runner before this build becomes a required repository gate.
+- Compatibility boundary: Lifecycle `2.11.0` is deliberately excluded because its AAR metadata requires API 37 and AGP 9.1+; `2.10.0` is the newest lifecycle line admitted by this API 36/AGP 8.13 foundation.
+- Upgrade trigger: move to AGP 9/built-in Kotlin or target/compile SDK 37 only through a focused compatibility change that also implements and tests the Android 17 local-network runtime-permission flow.
+
+### D-012 — Use collision-safe native Android identities and a narrow route surface
+
+- Decision: the release-shaped application ID is `com.t3tools.t3code.compose`; the development build appends `.dev`. Display names are `T3 Code Compose` and `T3 Compose Dev`. Custom schemes are `t3code-compose` and `t3code-compose-dev`, limited to the `pair` route.
+- Rationale: React Native owns `com.t3tools.t3code`, `.dev`, and `.preview`; SwiftUI owns `com.t3tools.t3code.swiftui` and `.swiftui.dev`. Android application-data and credential sandboxes therefore cannot overlap with either client.
+- App Links: `app.t3.codes` is T3-owned and is the only current web pairing host candidate, but the repository contains neither a Digital Asset Links publication for the Compose IDs nor approved signing-certificate fingerprints. T-002 therefore registers no `http`/`https` intent filters. App Links stay disabled until that host publishes matching `assetlinks.json`; arbitrary direct servers remain paste input or payloads inside the build-specific custom scheme.
+- Cleartext consequence: direct user-supplied LAN endpoints may be HTTP, so the foundation application permits cleartext transport at the application boundary. Pairing/transport tasks remain responsible for explicit input, typed failures, secret redaction, and never treating an arbitrary web origin as a trusted app route.
+
+### D-013 — Pin the foundation networking compatibility surface
+
+- Decision: pin OkHttp/MockWebServer `5.4.0`, kotlinx.coroutines `1.11.0`, and kotlinx.serialization JSON `1.11.0` in the standalone version catalog. HTTP and WebSocket attempts will use the shared OkHttp client with library-level retries disabled; supervisors remain the only retry owners.
+- HTTP compression: OkHttp documents transparent gzip response handling. Callers must not add their own unconditional gzip decoding; conformance tests will verify compressed canonical responses. Source: [OkHttp project documentation](https://github.com/lysine-dev/okhttp).
+- WebSocket compression: OkHttp 5.4.0 offers `permessage-deflate` and compresses outbound messages at or above its configurable `minWebSocketMessageToCompress` threshold (1024 bytes by default). The public `WebSocketListener.onOpen` receives the HTTP 101 `Response`, so the negotiated `Sec-WebSocket-Extensions` header is observable without internal APIs. T-007/T-021 must still prove a controlled compressed round trip because a header alone does not prove compatible frame encode/decode. Sources: [OkHttp compression setting](https://square.github.io/okhttp/5.x/okhttp/okhttp3/-ok-http-client/-builder/min-web-socket-message-to-compress.html) and OkHttp 5.4.0 `WebSocketListener`/`RealWebSocket` source.
+
+### D-014 — Exercise Android 16 local-network restrictions without over-declaring release permissions
+
+- Decision: because the foundation targets SDK 36, the release-shaped manifest declares `INTERNET` but does not declare or request `ACCESS_LOCAL_NETWORK`; Android explicitly says apps targeting SDK 36 or lower retain implicit LAN access and must not request the Android 17 permission. The development manifest alone declares `NEARBY_WIFI_DEVICES` with `neverForLocation` so maintainers can opt the dev package into Android 16's `RESTRICT_LOCAL_NETWORK` compatibility change, verify denied TCP behavior, and grant Nearby devices to restore access.
+- Android 16 coverage: on an API 36 device, enable `RESTRICT_LOCAL_NETWORK` for `com.t3tools.t3code.compose.dev`, reboot, exercise direct pairing with permission denied, then grant Nearby devices and repeat. T-006/T-014/T-016 own the typed failure, rationale UI, and instrumentation once those layers exist.
+- Android 17 coverage: before raising `targetSdk` to 37, add `ACCESS_LOCAL_NETWORK`, a runtime request/rationale and revocation path, and denial/recovery instrumentation on API 37. No unrelated Bluetooth, Wi-Fi discovery, location, or nearby-device permission is added to the release-shaped build. Source: [Android local-network permission guidance](https://developer.android.com/privacy-and-security/local-network-permission).
+
+### D-015 — Adapt only separable Android views; defer coupled terminal and showcase controls
+
+- Audit boundary: T-004 is a read-only reuse decision. No file under `apps/mobile/modules/` moves during foundation, and no existing module becomes a dependency of `apps/kotlin-android`.
+- `t3-terminal` — **defer**. Expo coupling is explicit in `android/build.gradle:32`, `T3TerminalModule.kt:3-61`, and the `ExpoView`/`EventDispatcher` shell in `T3TerminalView.kt:15-25`. JNI coupling is material: `GhosttyBridge.kt:5-63` loads two shared libraries and exposes the native surface, while `t3_terminal_jni.cpp:201-376` binds it to the current `expo.modules.t3terminal` JNI names. Resources include four ABI-specific `libghostty-vt.so` files and Meslo font assets loaded by `TerminalCanvasView.kt:35-41`. Toolchain coupling includes the mobile root SDK/NDK values, C++17 with warnings-as-errors, CMake 3.22.1, 16-KiB linker pages (`android/build.gradle:9-26`, `cpp/CMakeLists.txt:1-23`), plus pinned Ghostty revision `9f62873...`, Zig 0.15.2, Android NDK, patches, and four-ABI packaging (`scripts/build-libghostty-android.sh:10-14,84-151`). License coupling is Ghostty MIT plus MesloLGS NF Apache-2.0 and must retain `THIRD_PARTY_NOTICES.md:18-35` and `native/libghostty-vt/LICENSE`. A future terminal project may extract an ordinary Android engine/view library only if it keeps `T3TerminalModule` as a thin Expo adapter and adds a focused React Native check for ABI loading, initial buffer/feed, resize, input events, selection, cleanup, theme, and hardware-key revision before switching consumers.
+- `t3-review-diff` — **adapt in a follow-on review project**. The build's only declared dependency is Expo Modules Core (`android/build.gradle:17-19`), and the JS contract is concentrated in `T3ReviewDiffModule.kt:10-75`; however, the 1,429-line implementation currently subclasses `ExpoView` and dispatches Expo events directly (`T3ReviewDiffView.kt:26-33`). There is no JNI, native binary, packaged resource, or third-party runtime dependency: rows/themes/styles are Android/Kotlin models and JSON (`T3ReviewDiffView.kt:18-19,143-198,436-545`), and drawing is Android Canvas/system typeface code (`ReviewDiffCanvasDrawing.kt:3-11,157-174,305-313`). It inherits the mobile root compile/min/target SDK toolchain and the repository MIT license. When review work is approved, separate an ordinary Android review surface plus models/drawing helpers, retain a thin `T3ReviewDiffModule`/Expo adapter, and require a React Native compatibility check covering row/token reset and patching, collapse/view/line/comment events, scroll commands, cleanup, a representative render snapshot, and large-diff frame behavior.
+- `t3-composer-editor` — **adapt in a follow-on composer project**. Expo Modules Core and its prop/event/async surface are isolated in `android/build.gradle:17-19` and `T3ComposerEditorModule.kt:10-70`, while `T3ComposerEditorView.kt:25-35` currently combines `ExpoView` with the Android editor. There is no JNI or packaged resource. The reusable portion is ordinary Android `EditText`, selection/input-method/clipboard behavior, JSON token models, and `ReplacementSpan` rendering (`T3ComposerEditorView.kt:109-303,337-478`). It inherits the mobile root SDK toolchain. Its module-local Expo MIT license must remain attached to derived/extracted code in addition to repository licensing. A future extraction must leave a thin Expo adapter and pass a focused React Native compatibility check for controlled event-count fencing, token-chip rendering, selection, focus/blur, paste-image events, content sizing, autocorrect, and spellcheck before switching the RN consumer.
+- `t3-native-controls` — **defer and replace natively in Compose**. Expo coupling is the feature: the module reads `appContext.currentActivity`/`reactContext` showcase files and extras (`T3NativeControlsModule.kt:10-33`) and wraps a small `ExpoView`/event dispatcher (`T3HeaderButtonView.kt:8-22`). There is no JNI, packaged resource, third-party dependency, or module-local license; it inherits the mobile root SDK toolchain and repository MIT license. Its only reusable drawing is a 64-line private Canvas icon view (`T3HeaderButtonView.kt:34-97`), so sharing would cost more adapter surface than a semantic Compose icon/button implementation. Keep the React Native module unchanged; do not extract its showcase file protocol into the native app.
+- Gate ownership: T-020 owns the proceed/revise/stop call for any reuse project. `t3-review-diff` and `t3-composer-editor` require an approved measurable outcome, an ordinary Android boundary, retained thin Expo adapters, the focused RN checks above, license retention, and baseline performance evidence. Terminal additionally requires a supported NDK/CMake/Zig/Ghostty supply-chain plan and ABI/16-KiB-page tests. Native controls has no extraction prerequisite because replacement is the decision.
+
 ## Provisional Decisions
 
-- Application directory: `apps/kotlin-android`.
-- Release-shaped application ID: `com.t3tools.t3code.compose`; development suffix: `.dev`.
-- Development display name: `T3 Compose Dev`; release-shaped display name remains undecided until product positioning is approved.
 - Constructor composition is preferred over a dependency-injection framework during foundation.
-- Kotlin serialization, OkHttp, Room, and coroutines/Flow are the default libraries pending toolchain compatibility checks.
-- The selected networking stack must document transparent HTTP compression and WebSocket per-message-deflate behavior; no negotiation-inspection capability is assumed before T-001 evidence.
+- Room `2.8.4` is the selected non-secret persistence library for WS-C; its schema and processor wiring remain T-009 scope.
 
-These values are not release commitments. T-001 must confirm or replace them with evidence.
+These values are foundation architecture choices, not public-release commitments.
 
 ## Superseded Decisions
 
@@ -84,14 +116,7 @@ These values are not release commitments. T-001 must confirm or replace them wit
 
 ## Open Decision Questions
 
-- What are the supported minimum, target, and compile SDK levels?
-- Does the selected target require `ACCESS_LOCAL_NETWORK`, and how will Android 16 opt-in plus Android 17 enforcement be tested?
-- Which Android Gradle Plugin, Gradle, Kotlin, Compose BOM, and Java versions align with current CI and native libraries?
-- Should the directory/application identity use `kotlin-android`, `compose-android`, or a product-specific name?
 - Are contract fixtures checked in, generated during a focused command, or both?
-- Can existing native modules be extracted without depending on Expo-generated build state?
 - Which CI runner/emulator and physical-device class define the initial performance bar?
-- Which T3-owned domains can publish Digital Asset Links for each build identity/signing certificate?
-- Can the selected WebSocket implementation expose extension negotiation, or will a compressed round trip be the conformance proof?
 - Does FCM/relay support follow immediately after foundation or after core chat/workspace parity?
 - Who owns signing, Clerk, FCM, Play Console, and release operations for later projects?

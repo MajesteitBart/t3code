@@ -7,7 +7,7 @@
 - Web/desktop: React/Vite plus Electron.
 - React Native mobile: Expo 56, React Native 0.85, shared `packages/client-runtime`, platform native modules in Swift/Kotlin/C++.
 - SwiftUI mobile: iOS 17+, SwiftUI, native HTTP/WebSocket implementation, Keychain, WidgetKit, Share extension, Live Activities, Clerk, and Ghostty.
-- Proposed native Android: Kotlin, Jetpack Compose/Material 3, coroutines/Flow, OkHttp, Kotlin serialization, Room, Android Keystore, WorkManager, Glance, and optionally FCM. These choices are planning decisions until approved in the native Android project.
+- Native Android foundation: standalone `apps/kotlin-android` with Kotlin/Compose plugin 2.3.21, Compose BOM 2026.06.01, Gradle 8.13, AGP 8.13.2, JDK 17, min SDK 24, and target/compile SDK 36. Modules are `app`, `core-protocol` (OkHttp 5.4.0, coroutines/serialization 1.11.0), `core-data` (Room 2.8.4), and `core-testing`. Keystore, WorkManager, Glance, and FCM remain later-task scope.
 
 ## Commands
 
@@ -19,9 +19,16 @@ vp run --filter <package> typecheck
 node scripts/mobile-native-static-check.ts
 npx -y @bvdm/delano@latest status --open --brief
 npx -y @bvdm/delano@latest validate
+
+cd apps/kotlin-android
+./gradlew.bat foundationAssemble
+./gradlew.bat foundationUnitTest
+./gradlew.bat foundationStaticCheck
+./gradlew.bat foundationInstallDevelopment
+./gradlew.bat foundationInstrumentation
 ```
 
-Do not run repo-wide checks unless explicitly requested. The native Android project must add focused Gradle build, unit-test, instrumentation-test, lint, and benchmark entry points before implementation is considered ready.
+Do not run repo-wide checks unless explicitly requested. Native Android build, unit, static/lint, install, and instrumentation entry points are live. Contract, integration, accessibility, and performance entry points are reserved fail-closed tasks until T-005, T-017, T-016, and T-018 replace them with evidence.
 
 ## Runtime Constraints
 
@@ -29,8 +36,7 @@ Do not run repo-wide checks unless explicitly requested. The native Android proj
 - Worktree-local `.t3` state must remain isolated from live developer state under `~/.t3/userdata`.
 - The web client requires a pairing URL with its token.
 - The SwiftUI reference requires macOS/Xcode to build; this Windows checkout can inspect it but cannot verify its Xcode targets.
-- Android build prerequisites and CI image availability have not yet been audited.
-- The current branch is based on PR #5178 and is not rebased onto the newest upstream main.
+- Local Android prerequisites are verified with Temurin 17, Android Platform 36, Build Tools 35.0.0, platform-tools, and the API-35 `TwentyGoApi35` phone AVD. Repository CI still lacks a standalone Android SDK/Gradle job.
 
 ## Integration Points
 
@@ -38,6 +44,7 @@ Do not run repo-wide checks unless explicitly requested. The native Android proj
 - `packages/client-runtime`: reference behavior for shared web/React Native connection and state handling.
 - `apps/server`: authentication, transport, event sourcing, provider adapters, Git, files, terminals, and checkpoints.
 - `apps/swift-ios`: behavioral and native-client reference for the Android initiative.
-- `apps/mobile/modules`: existing Android terminal, diff, composer, and control implementations that may be extracted behind stable Android library boundaries.
+- `apps/mobile/modules`: existing Android implementations audited in D-015. Review-diff/composer may later be adapted behind thin Expo adapters; terminal and native controls are deferred for the recorded reasons.
+- `apps/kotlin-android`: independent Compose application and the stable Android build/test command surface.
 - Clerk and the T3 relay: account authentication and managed environments.
 - APNs today; FCM parity requires contract, relay persistence, and delivery changes rather than a client-only patch.

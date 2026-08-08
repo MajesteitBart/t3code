@@ -1,0 +1,4 @@
+{"timestamp":"2026-08-08T13:07:47Z","command":"bash apps/kotlin-android/gradlew clean foundationAssemble foundationUnitTest foundationStaticCheck --no-daemon","exit_code":1,"log_file":".agents/logs/tests/20260808T130745Z.log"}
+{"timestamp":"2026-08-08T13:08:50Z","command":"bash apps/kotlin-android/gradlew -p apps/kotlin-android clean foundationAssemble foundationUnitTest foundationStaticCheck --no-daemon","exit_code":0,"log_file":".agents/logs/tests/20260808T130759Z.log"}
+{"timestamp":"2026-08-08T13:10:47Z","command":"bash apps/kotlin-android/gradlew -p apps/kotlin-android foundationInstrumentation --no-daemon","exit_code":0,"log_file":".agents/logs/tests/20260808T131009Z.log"}
+{"timestamp":"2026-08-08T13:14:15Z","command":"bash apps/kotlin-android/gradlew -p apps/kotlin-android clean foundationAssemble foundationUnitTest foundationStaticCheck --no-daemon","exit_code":0,"log_file":".agents/logs/tests/20260808T131327Z.log"}

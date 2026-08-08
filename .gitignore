@@ -16,6 +16,10 @@ release/
 release-mock/
 .t3
 .idea/
+apps/kotlin-android/.gradle/
+apps/kotlin-android/.kotlin/
+apps/kotlin-android/captures/
+apps/kotlin-android/local.properties
 apps/web/.playwright
 apps/web/playwright-report
 apps/web/src/components/__screenshots__
