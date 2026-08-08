@@ -1,2 +1,6 @@
 # git autocrlf=true converts LF to CRLF on Windows, causing issues with oxfmt
 * text=auto eol=lf
+
+# Delano viewer bundles are generated artifacts and may contain significant
+# trailing whitespace inside JavaScript template literals.
+.delano/viewer/public/assets/viewer.js binary

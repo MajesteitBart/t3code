@@ -1,156 +1,147 @@
-# T3 Code
+# AGENTS.md — T3 Code
 
-T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provider CLIs (Codex, Claude Code, Cursor, Grok, OpenCode) and serves web, desktop, and mobile clients.
+## Mission
 
-You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
+Keep T3 Code an open, fast, remote-ready control surface for coding agents across web, desktop, React Native mobile, and native mobile clients. Prefer the smallest system that makes correct behavior unsurprising.
 
-## What makes T3 Code special?
+## First-Turn Workflow
 
-We have over 100,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.
+1. Read `.project/context/README.md`, then the active Delano project under `.project/projects/` and only the source-of-truth material relevant to the task.
+2. Run `git status --short --branch`, `delano status --open --brief`, and the smallest relevant diagnostic before editing.
+3. For material delivery work, work only from a ready or in-progress Delano task and keep task evidence plus `.project/context/progress.md` current. Small local fixes may use the compact workflow below.
+4. Inspect existing code and preserve unrelated or user-owned changes. Do not spawn subagents unless the user explicitly asks for them.
+5. Make the smallest coherent change, run focused checks while iterating, and report the result as `done`, `partial`, or `blocked`.
 
-### 1. Open at the core
+## Source of truth
 
-T3 Code is truly open. We share our roadmap, we share how we think about things, and of course we share all our code. A large number of our users run forks. We work in the open, and should strive to stay that way.
+- `HANDBOOK.md` and `.agents/`: Delano operating model, skills, validation runtime, and evidence rules.
+- `.project/context/README.md`: retrieval index for durable repository and product context.
+- `.project/projects/<slug>/`: active delivery contracts (`spec.md`, `plan.md`, `decisions.md`, `workstreams/`, `tasks/`, and `updates/`).
+- `README.md` and `CONTRIBUTING.md`: product entrypoint, setup, and contribution expectations.
+- `docs/user/`: shipped-product behavior; `docs/internals/`: architecture and contributor guidance; `docs/operations/`: runbooks.
+- `docs/internals/glossary.md`: canonical T3 terminology.
+- `packages/contracts/`: wire schemas. A schema change requires explicit decisions for the server, web, desktop, React Native mobile, and SwiftUI mobile implementations as applicable.
+- `.repos/`: vendored, read-only references. Prefer their established patterns; never edit or import from them. Use `vpr sync:repos` when intentionally updating the matching dependency.
 
-### 2. Performance without compromise
+Retrieval hints:
 
-Lots of apps have gotten bogged down with bad tech decisions and "slop". We have not, and we're proud of the performance of T3 Code. We regularly audit for performance regressions, often caused by sending too much data over websockets, css animations causing gpu spikes, lists being hard to render, and more. Make sure all changes are considerate of performance impact.
+- Delivery lifecycle → `HANDBOOK.md` and the matching `.agents/skills/*/SKILL.md`.
+- Current scope and acceptance → the active project's `spec.md`, `plan.md`, workstream, and task files.
+- Architecture → `docs/internals/overview.md`, `.project/context/system-patterns.md`, and the active plan.
+- Repository layout and commands → `.project/context/project-structure.md` and `.project/context/tech-context.md`.
+- UI/client validation → `.project/context/gui-testing.md` and the relevant client testing skill.
+- Current evidence and handoff state → `.project/context/progress.md` and project `updates/`.
 
-### 3. Remote ready
+## Delano workflow
 
-The architecture of T3 Code's websocket layer (npx t3) enables a lot of awesome remote features. These have become core to the product. Whether users are connecting directly over their local network, using Tailscale, or leaning in fully with T3 Connect (our tunnel solution, also in this repo), we need to make sure new features are properly supported.
+Delano context lives in `.project/context/`; delivery contracts live in `.project/projects/`. Keep them current when scope, architecture, status, evidence, or product direction changes. Prefer the Delano CLI for lifecycle/frontmatter changes so rollups stay consistent.
 
-### 4. Multi-surface
+Use the full flow for features, contract changes, or material improvements:
 
-T3 Code has 3 key app surfaces: **web**, **desktop**, and **mobile**.
+1. **Discovery**: define and approve a measurable outcome in `spec.md` with `discovery-skill`.
+2. **Prototype Probe**: time-box only when material uncertainty blocks a safe spec; write findings back to the spec.
+3. **Planning**: capture architecture, milestones, rollout, and rollback in `plan.md` with `planning-skill`.
+4. **Breakdown**: create atomic tasks with binary acceptance and acyclic dependencies using `breakdown-skill`.
+5. **Synchronization**: reconcile Linear or GitHub only when tracker state is involved, using `sync-skill` and explicit approval for external mutations.
+6. **Execution**: work dependency-safe tasks within workstream boundaries and record evidence in `updates/` with `execution-skill`.
+7. **Quality Ops**: run risk-based checks and verify acceptance before closure with `quality-skill`.
+8. **Closeout**: compare delivery to the outcome, update project memory, and close the loop with `closeout-skill`.
 
-**Web** is kind of two surfaces, as we have the public facing "app.t3.codes" as well as locally hosting the web app through the `npx t3` command. Both need to be supported by all new features where reasonable.
+For a small local fix: inspect current state, retrieve the relevant source of truth, make the smallest coherent change, verify narrowly, and update Delano artifacts only when scope, architecture, status, or evidence materially changed.
 
-**Desktop** is the main surface most users install first. It's a full Electron app that bundles the server runner as well. The desktop app can also be used as the host server, allowing remote connections from app.t3.codes or the mobile app.
+Common commands:
 
-**Mobile** has two separate clients that connect to the same T3 servers:
+```bash
+delano help
+delano status --open --brief
+delano validate
+delano next -- --all
+delano project create <slug> --name "<name>" --owner <owner>
+delano project show <slug> --json
+delano project start|close|block|defer|update <slug> --reason "<text>"
+delano workstream add <project-slug> <WS-ID> --name "<name>" --owner <owner>
+delano task add <project-slug> <T-ID> --name "<name>" --workstream <WS-ID>
+delano task open|start|close|block|defer|update <project-slug> <T-ID> --reason "<text>"
+delano update add <project-slug> --message "<text>" --task <T-ID> --stream <WS-ID>
+delano research <project-slug> <research-slug> --title "<title>" --question "<question>" --json
+```
 
-- `apps/mobile` is the React Native app for iOS and Android, available on the App Store and Google Play.
-- `apps/swift-ios` is the native SwiftUI app for iOS, with its own Xcode project, UI implementation, and app identities.
+Use `--evidence "<text>"` when closing tasks and `--message "<text>"` for task updates. If intent remains unclear, record research or open questions before changing executable contracts.
 
-Treat them as distinct clients. UI, navigation, persistence, and build changes in one do not automatically reach the other. When implementation details matter, say **React Native mobile** or **SwiftUI mobile** instead of referring ambiguously to “the mobile app.”
+## Model selection for workflows and subagents
 
-## A note from Theo
+- Do not spawn subagents unless the user explicitly mentions their use. This rule overrides workflow convenience or parallelism.
+- When subagents are explicitly authorized, assign bounded ownership, preserve other agents' changes, and use only models available in the active harness.
+- Choose stronger reasoning for architecture, protocol, security, and review work; choose lower-cost execution only for clear, mechanical tasks. Judge output quality rather than model labels.
+- User-facing UI, copy, motion, and API design require deliberate taste review in addition to correctness.
 
-I like ambitious ideas, simple systems, and software that feels obvious. Do not preserve complexity just because it already exists. Do not introduce machinery because it looks architecturally impressive. Understand the real constraint, then fight for the smallest model that makes the correct behavior unsurprising.
+## Commands
 
-Channel both "measure twice, cut once" and "yagni". Fight scope creep. Try to honor the dev's intent in both a minimal and realistic fashion.
+```powershell
+vp i
+vp run dev
+vp run dev:server
+vp run dev:web
+vp test run <focused-test-files>
+vp run --filter <package> typecheck
+vp lint <focused-paths>
+vp fmt --check <focused-paths>
+delano status --open --brief
+delano validate
+```
 
-The rest of this document is meant to help you navigate the codebase and make changes effectively. Think of these instructions less as "hard rules", more as "good defaults". The developer's preferences should be able to override anything here.
+- Do not run repo-wide `vp check`, `vp run -r test`, or `vp run -r typecheck` unless the user asks; CI owns the full suite.
+- Read actual dev ports and pairing URLs from the `[dev-runner]` line. Never set `VITE_HTTP_URL` or `VITE_WS_URL` for development; Vite proxies `/api`, `/ws`, `/oauth`, and `/.well-known` on one origin.
+- The web app requires pairing. Hand over the pairing URL including its token, never a bare origin.
+- Worktree state defaults to the worktree's gitignored `.t3`, which intentionally outranks ambient `T3CODE_HOME`. An explicit `--home-dir` still wins.
 
-Of note: Most T3 Code contributions will come from T3 Code itself, often controlled remotely. This means you should be careful about accessing data, killing dev servers, and other things that may damage the T3 Code instance that the contributor is using.
+## Architecture rules
 
-## A small glossary
+T3 Code has distinct clients and connection modes:
 
-We need to be on the same page with terminology. When communicating, use this language:
+- `apps/server`: WebSocket orchestration, providers, checkpointing, and event-sourced command handling. Read `.repos/effect-smol/LLMS.md` before writing Effect code.
+- `apps/web`: React/Vite client; `apps/desktop` wraps it with Electron and IPC behavior.
+- `apps/mobile`: React Native client for iOS and Android.
+- `apps/swift-ios`: separate native SwiftUI client with its own UI, persistence, and identities.
+- `apps/marketing`: public website.
+- `packages/client-runtime`: TypeScript client logic shared by web and React Native mobile; it does not automatically reach SwiftUI.
+- `packages/contracts`: typed wire contracts; keep heavy runtime logic elsewhere.
+- `packages/shared`: shared runtime utilities through subpath exports; no barrel exports.
 
-- **you** means the agent reading this file and changing T3 Code.
-- **we, us, and maintainers** mean Theo, Julius and the people building T3 Code. These are who you are talking to now.
-- **user** means the person using T3 Code to direct coding agents.
-- **agent** means the coding agent a user runs inside T3 Code. Depending on context, that may also include you.
-- **provider** means the agent runtime or harness T3 Code talks to, such as Codex, Claude, Cursor, or OpenCode.
-- **client** means the web, desktop, or mobile UI.
-- **environment** means one running T3 server and the machine, filesystem, provider credentials, and state it owns.
-- **project** means an environment-local workspace record rooted at a directory.
-- **thread** means the durable conversation and work history for a project.
-- **turn** means one user-to-agent cycle, including follow-up work such as checkpointing.
-- **T3 home** means the base data directory. Runtime state normally lives below its userdata directory.
+Keep these product principles intact:
 
-## The three ways to hurt yourself
+- **Open at the core**: architecture and implementation remain understandable and forkable.
+- **Performance without compromise**: avoid oversized WebSocket payloads, continuously repainting animations, GPU-heavy effects, and expensive list rendering. Users notice dropped frames, stale labels, and lying spinners.
+- **Remote ready**: support local network, remote/relay, tunnel, multi-device, and multi-environment behavior deliberately.
+- **Multi-surface**: decide explicitly which of web, desktop, React Native mobile, and SwiftUI mobile a change affects.
 
-1. **Killing by pattern.** Never `pkill -f`, `pgrep | kill`, or `kill` a PID you found by matching a name, path, or worktree string. Your own agent process has this worktree's path in its argv, and this machine runs several other dev servers at once. Kill only a PID you captured at spawn, or the owner of your port from `ss -H -ltnp` after confirming `/proc/<pid>/cwd` is your worktree.
-2. **Writing to the live install.** `~/.t3/userdata` is the developer's real T3 Code database, in use while you work. Reading it and copying from it are fine, and a good way to get real test data (see Test data). Never start a server against it, never open it read-write, never clean it up.
-3. **Baking in origins.** Never set `VITE_HTTP_URL` or `VITE_WS_URL` for dev. Dev is single-origin and Vite proxies `/api`, `/ws`, `/oauth`, and `/.well-known`. Setting them bakes localhost into the bundle and silently breaks every remote browser.
+Before completing user-facing or provider-shaped work, check:
 
-## Hit every surface
+- Entry points: chat, Settings, command palette, and keybindings where applicable.
+- Providers: Codex, Claude, Cursor, Grok, and OpenCode; complexity belongs at adapter boundaries.
+- Contracts: schema, server, and every applicable client.
+- Reverse states: every action has an exit and visible current state.
+- Connection modes: local, relay, tunnel, multi-device, and multi-environment cases.
+- Docs: user-visible behavior in `docs/user/`, architecture in `docs/internals/`, runbooks in `docs/operations/`, and vocabulary in the glossary.
 
-The most common defect in this repo is a change that works on the path you tested and is missing everywhere else. Before calling frontend work done, walk this list and say which entries applied:
+Prefer inferred types over annotations; never introduce `any` casually. Comments explain how a function or abstraction is used, not each line of behavior.
 
-- **Entry points.** A behavior reachable from the chat view is usually also reachable from Settings, the command palette, and a keybinding. Fixing one is not fixing the feature.
-- **Clients.** Web, desktop (wraps web, adds Electron shell/IPC), React Native mobile, and SwiftUI mobile. Decide explicitly which mobile clients a change applies to. Shared TypeScript client logic lives in `packages/client-runtime`; the SwiftUI client is a separate native implementation.
-- **Providers.** Codex, Claude, Cursor, Grok, and OpenCode each have an adapter. Provider-shaped features need a decision per adapter, even if the decision is "not supported here".
-- **Contracts.** Anything crossing the wire is typed in `packages/contracts`. When a schema changes, update the server, web, desktop, React Native mobile, and SwiftUI mobile implementations as applicable.
-- **Reverse states.** If you added a way in, add the way out and the way to see it. Snooze needs unsnooze. Close needs reopen. A one-way door is a bug.
-- **Connection modes.** Local, remote/relay, and tunnel behave differently. Multi-device and multi-environment cases are real.
-- **Docs.** `docs/` splits by audience. Behavior changes that a user would notice belong in `docs/user/` (shipped-product voice, no repo tooling or source paths); architecture and contributor changes in `docs/internals/`; runbooks in `docs/operations/`; new vocabulary in `docs/internals/glossary.md`.
+## Quality and safety
 
-## Dev servers
+- Never kill processes by name, path, worktree string, `pkill -f`, or matched PID. Stop only a PID captured at spawn, or a confirmed port owner whose process working directory is this worktree.
+- `~/.t3/userdata` is live developer state. It may be read or copied but never served, opened read-write, symlinked, or cleaned. Test data flows one way into worktree-local `.t3/userdata`.
+- Snapshot a live SQLite source with `VACUUM INTO`; do not plain-copy an active database without its WAL/SHM siblings.
+- Preserve unrelated working-tree changes. Avoid destructive git/filesystem commands and recoverable-data loss.
+- Do not expose secrets, credentials, tokens, pairing codes, or private user data in logs, docs, evidence, commits, issues, or PRs.
+- Backend behavior changes require focused tests. Event-sourced async tests wait on typed receipts and worker drains, never arbitrary sleeps or polling timeouts.
+- User-visible frontend validation should cover each affected surface. Only run browser/computer-use validation when the user explicitly agrees or asks; use `test-t3-app` for web and `test-t3-mobile` for the selected React Native or SwiftUI path.
+- Stop every server or helper you start using the exact PID you captured.
 
-- `vp i` installs. Worktrees get this from the t3.json setup script; if module resolution looks broken, it probably did not run.
-- `vp run dev` starts server and web. In a worktree, state defaults to that worktree's gitignored `.t3`, which deliberately outranks an ambient `T3CODE_HOME` so you cannot land on shared state by accident. An explicit `--home-dir` still wins.
-- Ports derive from the worktree path and are stable across restarts, but read the real ones from the `[dev-runner]` line since occupied ports shift.
-- `--share` publishes over the tailnet. Do not open the URL when you use this, just send it to the user with the pairing code included in url
-- The web app requires pairing. Hand over the pairing URL, not the bare origin. A URL without its token is useless to whoever you gave it to.
-- Stop what you started, by the PID you tracked. See rule 1.
+## Git and evidence
 
-## Test data
-
-An empty database is a bad test. Seed your worktree's `.t3` with a copy of real data instead of pointing at live state:
-
-- Copy from `~/.t3/userdata` (the developer's real data, the most realistic test set) or `~/.t3/dev`. Worktree state lives at `<worktree>/.t3/userdata`.
-- Snapshot the database with `VACUUM INTO`, which is safe even while a server has the source open and yields one consistent file:
-
-  ```bash
-  mkdir -p .t3/userdata
-  rm -f .t3/userdata/state.sqlite*  # VACUUM INTO refuses to overwrite
-  bun -e "new (require('bun:sqlite').Database)(process.env.HOME + '/.t3/userdata/state.sqlite', { readonly: true }).run(\"VACUUM INTO '.t3/userdata/state.sqlite'\")"
-  ```
-
-  A plain `cp` is only safe when no server has the source open, and must bring the `-wal` and `-shm` siblings along. A live file copy is a corrupt copy.
-
-- Bring `secrets` and `settings.json` only if the flow under test needs them.
-- Copy in, never symlink. Data flows one way: into your sandbox, never back out.
-
-## Verifying
-
-- Smallest proof that the change works. `vp test run <files>` for the tests you touched, targeted lint and typecheck for the scope you changed.
-- **Do not run repo-wide checks.** No `vp check`, no `vp run -r test`, no `vp run -r typecheck` unless I ask. CI owns the full suite.
-- Backend behavior changes ship with focused tests for that behavior.
-- The server is event-sourced and its async flows emit typed receipts. Wait on receipts and worker drains, never on sleeps or polling. A test that needs a timeout to pass is wrong.
-- Upon request, user-visible frontend changes should get one integrated pass in a real client: `test-t3-app` for web and `test-t3-mobile` for either mobile client. Select the React Native or SwiftUI path before building. The primary agent does this once after integrating. Subagents do not launch their own dev servers. Ask permission before doing computer use or spinning up browsers.
-
-## Pull requests
-
-- Never make a PR unless the developer explicitly asks you to do so.
-- Conventional commit titles, plain language: `fix(web): new threads no longer spike CPU`.
-- Body: the problem in a sentence or two, then how you fixed it. End with the model and harness that did the work.
-- **Rebase onto latest main before opening.** Stale branches conflict and burn a review round.
-- UI changes need before/after images. Motion or timing needs a short video.
-- One concern per PR. If the description says "also", split it.
-- When babysitting: poll checks and comments newer than the last push, verify each bot finding against the source, fix real ones, dismiss false positives with a written reason. Stay quiet when nothing is new. Stop when the bots are green on the latest commit.
-
-## How it works
-
-Clients send typed WebSocket requests. The server turns them into _commands_, a pure _decider_ turns commands into persisted _events_, and a _projector_ derives the read model the UI renders. Provider CLIs run as subprocesses; per-provider _adapters_ translate their native protocols into orchestration events. Side effects run in queue-backed _reactors_ that emit _receipts_ when milestones land. Each turn ends with a _checkpoint_, a hidden git ref, so the app can diff and restore.
-
-Full glossary with file links: `docs/internals/glossary.md`
-
-## Where code lives
-
-- `apps/server` - WebSocket, orchestration, providers, checkpointing. Effect-heavy: read `.repos/effect-smol/LLMS.md` before writing Effect code.
-- `apps/web` - React/Vite UI. `apps/desktop` wraps it and adds Electron behavior.
-- `apps/mobile` - React Native client for iOS and Android.
-- `apps/swift-ios` - Separate native SwiftUI client for iOS.
-- `apps/marketing` - Marketing site.
-- `packages/contracts` - Effect/Schema contracts plus small derived helpers. No heavy runtime logic.
-- `packages/shared` - shared runtime utils, subpath exports, no barrel.
-- `packages/client-runtime` - TypeScript client code shared by web and React Native mobile. SwiftUI implements the corresponding native client behavior separately.
-- `.repos/` - vendored read-only references. Prefer their patterns over invented ones. Never edit or import from them. Sync with `vpr sync:repos` when bumping the matching dependency.
-
-## Taste
-
-- Complexity belongs at the adapter boundary. Orchestration stays pure, UI stays dumb.
-- Inferred types over annotations. `any` is the enemy.
-- Comments describe how a thing is used, and move when the code moves. To be used mostly to describe functions, not to annotate every line of behavior.
-- Our users drive agents all day and notice a dropped frame, a lying spinner, and a stale label. No continuously repainting animations; they peg the GPU on high-refresh displays.
-- If a rule here fights the task in front of you, say so loudly and get a human sign-off before breaking it.
-
-## Additional tips
-
-- Don't verify with browsers or computer use unless the user explicitly agrees or requests it.
-- Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.
+- Work on the current branch unless the user directs otherwise. Commits, pushes, PRs, rebases, releases, and public mutations require explicit user authorization.
+- Never open a PR unless explicitly asked. Before a requested PR, rebase onto current main, keep one concern per PR, and use a conventional plain-language title.
+- UI PRs require before/after images; motion or timing changes require a short video.
+- Before any requested commit: run `git diff --check`, focused risk-appropriate tests/builds, `delano validate`, and `git status --short`.
+- A task closes only when its binary acceptance criteria are checked and concrete command or artifact evidence is recorded.
+- Report verification honestly, including checks skipped because the environment, platform, permission, or scope made them unavailable.
