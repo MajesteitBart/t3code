@@ -17,6 +17,6 @@ class MainActivityTest {
   @Test
   fun foundationRootRenders() {
     composeRule.onNodeWithTag(FoundationSemantics.Root).assertIsDisplayed()
-    composeRule.onNodeWithText("Native Android foundation").assertIsDisplayed()
+    composeRule.onNodeWithTag(FoundationSemantics.AddEnvironment).assertIsDisplayed()
   }
 }

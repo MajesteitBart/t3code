@@ -7,7 +7,7 @@
 - Web/desktop: React/Vite plus Electron.
 - React Native mobile: Expo 56, React Native 0.85, shared `packages/client-runtime`, platform native modules in Swift/Kotlin/C++.
 - SwiftUI mobile: iOS 17+, SwiftUI, native HTTP/WebSocket implementation, Keychain, WidgetKit, Share extension, Live Activities, Clerk, and Ghostty.
-- Native Android foundation: standalone `apps/kotlin-android` with Kotlin/Compose plugin 2.3.21, Compose BOM 2026.06.01, Gradle 8.13, AGP 8.13.2, JDK 17, min SDK 24, and target/compile SDK 36. Modules are `app`, `core-protocol` (OkHttp 5.4.0, coroutines/serialization 1.11.0), `core-data` (Room 2.8.4 plus Android Keystore), and `core-testing` (real disposable T3 fixture). WorkManager, Glance, and FCM remain later-task scope.
+- Native Android foundation: standalone `apps/kotlin-android` with Kotlin/Compose plugin 2.3.21, Compose BOM 2026.06.01, Gradle 8.13, AGP 8.13.2, JDK 17, min SDK 24, and target/compile SDK 36. Modules are `app` (lifecycle-aware ViewModel/actions plus adaptive Compose shell), `core-protocol` (OkHttp 5.4.0, coroutines/serialization 1.11.0), `core-data` (Room 2.8.4 plus Android Keystore), and `core-testing` (real disposable T3 fixture). WorkManager, Glance, and FCM remain later-task scope.
 
 ## Commands
 

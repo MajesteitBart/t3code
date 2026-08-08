@@ -2,9 +2,9 @@
 id: WS-D
 name: WS-D Adaptive Product Shell
 owner: team
-status: planned
+status: active
 created: 2026-08-07T13:12:09Z
-updated: 2026-08-07T13:12:21Z
+updated: 2026-08-08T17:05:14Z
 operating_mode: multi-stream
 ---
 

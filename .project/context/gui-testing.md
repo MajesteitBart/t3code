@@ -4,7 +4,7 @@
 
 - Automated and build verification is required for user-visible client changes.
 - Integrated browser, simulator, emulator, or computer-use verification requires explicit user approval before launching it.
-- Use the repository `test-t3-app` skill for web and `test-t3-mobile` for the selected React Native or SwiftUI client. Native Android support must be added to the mobile testing workflow as part of its delivery project.
+- Use the repository `test-t3-app` skill for web and `test-t3-mobile` for the selected React Native or SwiftUI client. Standalone native Android currently uses the focused `apps/kotlin-android` Gradle install/instrumentation tasks plus an explicitly approved, isolated emulator; a unified mobile-skill path remains follow-on tooling work.
 
 ## Critical Routes and States
 

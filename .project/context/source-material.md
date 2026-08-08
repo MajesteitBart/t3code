@@ -6,6 +6,7 @@
 - The initial setup request authorized planning artifacts only. On 2026-08-08, the user separately authorized full WS-A implementation, focused Gradle/build and emulator evidence, a commit, and a push of the current branch; the user explicitly prohibited opening a pull request.
 - On 2026-08-08, the user separately authorized full WS-B contracts/transport implementation, real Gradle/contract/integration evidence, a commit, and a push of the current branch; the user again explicitly prohibited a pull request.
 - On 2026-08-08, the user explicitly expanded the next delivery to T-017 and then WS-C T-012/T-013, including real server/Kotlin/API-35 persistence and debug/release gates, a coherent commit, and a push of the current branch; a pull request remained prohibited.
+- On 2026-08-08, the user authorized dependency-safe WS-D execution, real Compose/unit/integration/debug-release/emulator evidence, a coherent commit, and a push with no pull request. The approved spec/plan still governs scope: T-014/T-015 were completed, T-016 remains gated by T-018, and production chat/composer behavior remains a follow-on project under D-002/T-020.
 
 ## Primary Reference
 

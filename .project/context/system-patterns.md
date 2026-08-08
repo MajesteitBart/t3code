@@ -20,6 +20,8 @@ Native Android now makes that boundary executable: `OneAttemptHttpClient` disabl
 
 Transport, authentication, persistence, retry, and domain state remain outside composables/views. The SwiftUI app uses `FeatureClient`; web and React Native use `packages/client-runtime`. Native Android should define a similarly testable boundary and avoid a single adapter object accumulating unrelated feature logic.
 
+The native Android foundation now composes the existing HTTP, protected catalog, supervisor, and reconciler modules in `FoundationViewModel`; immutable UI models and `FoundationActions` are the only inputs to composables. Aggregate rows remain environment-scoped, and lifecycle foreground changes suspend/resume supervision without copying retry or persistence policy into UI code.
+
 ## Contract Conformance Without Dual Truth
 
 `packages/contracts` is canonical. Native clients necessarily model the wire shape in their language, but conformance fixtures should be derived from or checked against canonical TypeScript schemas. Hand-copied Kotlin models are not a second contract authority.

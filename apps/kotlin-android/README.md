@@ -2,6 +2,20 @@
 
 This is the standalone Kotlin/Jetpack Compose client. Its Gradle build is independent of Expo prebuild, Metro, and `apps/mobile/android`; run every command below from `apps/kotlin-android`.
 
+## Foundation product shell
+
+The app now uses the verified protocol, persistence, supervision, and reconciliation modules as one composition root. It can:
+
+- accept a pasted canonical pairing link, loose server-and-code input, copied `t3code://pair?pairingUrl=...` QR-wrapper text, or the build-specific `t3code-compose[-dev]://pair?pairingUrl=...` Android route;
+- exchange and discard the one-time credential, protect only the resulting direct bearer with Android Keystore, and restore saved environments plus last-known shell rows from Room;
+- activate, retry, re-pair, and remove saved environments while showing reachable, offline, reconnecting, revoked, and last-known states separately;
+- render collision-safe project and thread navigation as a single pane below 600 dp, a retained environment/content layout from 600 dp, and a three-pane list/detail layout from 840 dp;
+- stop live supervision when the activity is not foregrounded and collect UI state through the lifecycle-aware Compose boundary.
+
+Pairing text is rendered as a password field and is cleared after exchange. Safe error surfaces may show a sanitized server trace ID, but never the one-time code, access credential, or WebSocket ticket. Arbitrary server URLs remain valid only when the user explicitly pastes them or they arrive inside the reviewed custom wrapper. No `http` or `https` App Link is registered: `app.t3.codes` still lacks Digital Asset Links for these package/signing identities, so unowned web hosts cannot inject a connection route.
+
+The foundation shell intentionally stops at environment/project/thread state. Production transcript rendering, composer/send behavior, workspace tools, T3 Connect, push, and release remain outside the approved foundation contract.
+
 ## Prerequisites
 
 - JDK 17, exposed through `JAVA_HOME` or Gradle's normal Java discovery.
