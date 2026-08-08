@@ -2,9 +2,9 @@
 id: WS-E
 name: WS-E Quality, CI, and Handoff
 owner: team
-status: planned
+status: active
 created: 2026-08-07T13:12:09Z
-updated: 2026-08-07T13:12:21Z
+updated: 2026-08-08T15:39:47Z
 operating_mode: multi-stream
 ---
 

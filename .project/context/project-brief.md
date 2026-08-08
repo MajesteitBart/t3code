@@ -35,4 +35,4 @@ Out of scope for the planning bootstrap:
 - Public releases, store submissions, deployments, or new external tracker artifacts.
 - Claiming exact visual identity with SwiftUI where Android conventions provide a clearer native behavior.
 
-The planning bootstrap is complete. Separate 2026-08-08 delivery requests authorized WS-A and WS-B, which now provide the independently buildable application plus canonical contracts and policy-free transport boundary. WS-C through WS-E still require separate dependency-safe task authorization.
+The planning bootstrap is complete. Separate 2026-08-08 delivery requests authorized WS-A, WS-B, the WS-E T-017 dependency enabler, and WS-C. Those scopes now provide the independently buildable application, canonical contracts and policy-free transport, protected persistence, collision-safe state/reconciliation, active/passive recovery, stable ambiguous-turn handling, and a real disposable two-server fixture. Remaining WS-D/WS-E tasks still require separate dependency-safe authorization.

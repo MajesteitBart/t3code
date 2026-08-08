@@ -102,6 +102,13 @@ import * as ResourceAttribution from "./resourceTelemetry/ResourceAttribution.ts
 import * as ResourceMonitorBinary from "./resourceTelemetry/ResourceMonitorBinary.ts";
 import * as ResourceTelemetry from "./resourceTelemetry/ResourceTelemetry.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
+import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { ProviderCommandReactor } from "./orchestration/Services/ProviderCommandReactor.ts";
+import { ProviderRuntimeIngestionService } from "./orchestration/Services/ProviderRuntimeIngestion.ts";
+import { CheckpointReactor } from "./orchestration/Services/CheckpointReactor.ts";
+import { ThreadDeletionReactor } from "./orchestration/Services/ThreadDeletionReactor.ts";
+import { OrchestrationCommandReceiptRepository } from "./persistence/Services/OrchestrationCommandReceipts.ts";
 import {
   clearPersistedServerRuntimeState,
   makePersistedServerRuntimeState,
@@ -448,218 +455,241 @@ export const makeRoutesLayer = Layer.mergeAll(
   Layer.provide(httpCompressionLayer),
 );
 
-export const makeServerLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const config = yield* ServerConfig.ServerConfig;
-    const activation = yield* Deferred.make<void>();
-    const awaitActivation = Deferred.await(activation);
-    const activationLayer = Layer.succeed(ServerActivation, awaitActivation);
-    const runtimeStateParked = yield* Deferred.make<void>();
-    const tailscaleParked = yield* Deferred.make<void>();
-    const cloudLinkParked = yield* Deferred.make<void>();
-    const routesReady = yield* Deferred.make<void>();
-    const launcherLayer = ServiceLauncherClient.layer;
+export type ServerApplicationServices =
+  | ServerConfig.ServerConfig
+  | HttpServer.HttpServer
+  | ServerRuntimeStartup.ServerRuntimeStartup
+  | EnvironmentAuth.EnvironmentAuth
+  | OrchestrationEngineService
+  | ProjectionSnapshotQuery
+  | ProviderCommandReactor
+  | ProviderRuntimeIngestionService
+  | CheckpointReactor
+  | ThreadDeletionReactor
+  | OrchestrationCommandReceiptRepository;
 
-    yield* fixPath();
+export type AdditionalServerApplicationLayer = Layer.Layer<never, never, ServerApplicationServices>;
 
-    const httpListeningLayer = Layer.effectDiscard(
-      Effect.gen(function* () {
-        yield* HttpServer.HttpServer;
-        const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
-        yield* startup.markHttpListening;
-      }),
-    );
-    const runtimeStateLayer = Layer.effectDiscard(
-      Effect.acquireRelease(
+export const makeServerLayerWithApplication = (
+  additionalApplicationLayer: AdditionalServerApplicationLayer,
+) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const activation = yield* Deferred.make<void>();
+      const awaitActivation = Deferred.await(activation);
+      const activationLayer = Layer.succeed(ServerActivation, awaitActivation);
+      const runtimeStateParked = yield* Deferred.make<void>();
+      const tailscaleParked = yield* Deferred.make<void>();
+      const cloudLinkParked = yield* Deferred.make<void>();
+      const routesReady = yield* Deferred.make<void>();
+      const launcherLayer = ServiceLauncherClient.layer;
+
+      yield* fixPath();
+
+      const httpListeningLayer = Layer.effectDiscard(
         Effect.gen(function* () {
-          yield* Deferred.succeed(runtimeStateParked, undefined).pipe(Effect.orDie);
-          yield* awaitActivation;
-          const server = yield* HttpServer.HttpServer;
-          const address = server.address;
-          if (typeof address === "string" || !("port" in address)) {
-            return;
-          }
-
-          const state = yield* makePersistedServerRuntimeState({
-            config,
-            port: address.port,
-          });
-          yield* persistServerRuntimeState({
-            path: config.serverRuntimeStatePath,
-            state,
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("Failed to persist server runtime state", { cause }),
-            ),
-          );
+          yield* HttpServer.HttpServer;
+          const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
+          yield* startup.markHttpListening;
         }),
-        () =>
-          clearPersistedServerRuntimeState(config.serverRuntimeStatePath).pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("Failed to clear server runtime state", { cause }),
-            ),
-          ),
-      ),
-    );
-    const tailscaleServeLayer = config.tailscaleServeEnabled
-      ? Layer.effectDiscard(
-          Effect.acquireRelease(
-            Effect.gen(function* () {
-              yield* Deferred.succeed(tailscaleParked, undefined).pipe(Effect.orDie);
-              yield* awaitActivation;
-              const server = yield* HttpServer.HttpServer;
-              const address = server.address;
-              if (typeof address === "string" || !("port" in address)) {
-                return null;
-              }
-
-              const localPort = address.port;
-              return yield* ensureTailscaleServe({
-                localPort,
-                servePort: config.tailscaleServePort,
-                localHost: "127.0.0.1",
-              }).pipe(
-                Effect.as({ localPort, servePort: config.tailscaleServePort }),
-                Effect.tap(() =>
-                  Effect.logInfo("Tailscale Serve configured", {
-                    localPort,
-                    servePort: config.tailscaleServePort,
-                  }),
-                ),
-                Effect.catch((cause) =>
-                  Effect.logWarning("Failed to configure Tailscale Serve", {
-                    cause,
-                    localPort,
-                    servePort: config.tailscaleServePort,
-                  }).pipe(Effect.as(null)),
-                ),
-              );
-            }),
-            (configured) =>
-              configured
-                ? disableTailscaleServe({ servePort: configured.servePort }).pipe(
-                    Effect.tap(() =>
-                      Effect.logInfo("Tailscale Serve disabled", {
-                        servePort: configured.servePort,
-                      }),
-                    ),
-                    Effect.catch((cause) =>
-                      Effect.logWarning("Failed to disable Tailscale Serve", {
-                        cause,
-                        servePort: configured.servePort,
-                      }),
-                    ),
-                  )
-                : Effect.void,
-          ),
-        )
-      : Layer.empty;
-    const cloudDesiredLinkReconcileLayer = Layer.effectDiscard(
-      Effect.gen(function* () {
-        if (!hasCloudPublicConfig) {
-          yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
-          return;
-        }
-        const releaseManagedTunnel = releaseManagedTunnelOnShutdown().pipe(
-          Effect.timeout("10 seconds"),
-          Effect.tap((released) =>
-            released ? Effect.logInfo("Released the managed tunnel on shutdown") : Effect.void,
-          ),
-          Effect.catchCause((cause) =>
-            Effect.logWarning(
-              "Failed to release the managed tunnel on shutdown; the next link reuses it",
-              { cause },
-            ),
-          ),
-          Effect.asVoid,
-        );
-        // A launcher trial can be stopped before activation. The previous
-        // server is already gone, so the trial owns cleanup immediately; the
-        // pending-state check keeps the tunnel for normal commit or rollback,
-        // while the launcher's explicit-stop marker allows it to be released.
-        // Other runtimes wait for activation so a failed standby cannot tear
-        // down the active runtime's tunnel.
-        const cleanupBeforeActivation = yield* pendingServiceUpdateExists;
-        if (cleanupBeforeActivation) {
-          yield* Effect.addFinalizer(() => releaseManagedTunnel);
-        }
-        yield* forkParked(
+      );
+      const runtimeStateLayer = Layer.effectDiscard(
+        Effect.acquireRelease(
           Effect.gen(function* () {
-            if (!cleanupBeforeActivation) {
-              yield* Effect.addFinalizer(() => releaseManagedTunnel);
-            }
-            if (!(yield* CloudCliState.readCliDesiredCloudLink)) return;
+            yield* Deferred.succeed(runtimeStateParked, undefined).pipe(Effect.orDie);
+            yield* awaitActivation;
             const server = yield* HttpServer.HttpServer;
             const address = server.address;
-            if (typeof address === "string" || !("port" in address)) return;
-            // No settling delay before the first attempt: routes are already
-            // serving by the time activation opens this gate (the startup
-            // sequence awaits routesReady), and the retry schedule below
-            // covers anything this sleep used to hedge against. Every
-            // millisecond here is dead time on the path to remote
-            // reachability after a restart.
-            yield* reconcileDesiredCloudLink(`http://127.0.0.1:${address.port}`).pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag !== "EnvironmentHttpBadRequestError" &&
-                  error._tag !== "EnvironmentHttpUnauthorizedError" &&
-                  error._tag !== "EnvironmentHttpConflictError",
-                schedule: Schedule.exponential("1 second").pipe(
-                  Schedule.modifyDelay(({ duration }) =>
-                    Effect.succeed(Duration.min(duration, Duration.seconds(30))),
-                  ),
-                  Schedule.upTo({ duration: "10 minutes" }),
-                ),
-              }),
-              Effect.tap(() => Effect.logInfo("T3 Connect desired link reconciled on startup")),
-              Effect.catch((cause) =>
-                Effect.logWarning("Failed to reconcile T3 Connect desired link on startup", {
-                  cause,
-                }),
+            if (typeof address === "string" || !("port" in address)) {
+              return;
+            }
+
+            const state = yield* makePersistedServerRuntimeState({
+              config,
+              port: address.port,
+            });
+            yield* persistServerRuntimeState({
+              path: config.serverRuntimeStatePath,
+              state,
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("Failed to persist server runtime state", { cause }),
               ),
             );
           }),
-        );
-        yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
-      }),
-    );
+          () =>
+            clearPersistedServerRuntimeState(config.serverRuntimeStatePath).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("Failed to clear server runtime state", { cause }),
+              ),
+            ),
+        ),
+      );
+      const tailscaleServeLayer = config.tailscaleServeEnabled
+        ? Layer.effectDiscard(
+            Effect.acquireRelease(
+              Effect.gen(function* () {
+                yield* Deferred.succeed(tailscaleParked, undefined).pipe(Effect.orDie);
+                yield* awaitActivation;
+                const server = yield* HttpServer.HttpServer;
+                const address = server.address;
+                if (typeof address === "string" || !("port" in address)) {
+                  return null;
+                }
 
-    const runtimeServicesLive = ServerRuntimeStartup.layerWithOptions({
-      activate: Deferred.succeed(activation, undefined).pipe(Effect.asVoid),
-      abort: (error) => Deferred.die(activation, error).pipe(Effect.asVoid),
-      awaitAuxiliaryParked: Effect.all(
-        [
-          Deferred.await(runtimeStateParked),
-          Deferred.await(cloudLinkParked),
-          Deferred.await(routesReady),
-          ...(config.tailscaleServeEnabled ? [Deferred.await(tailscaleParked)] : []),
-        ],
-        { concurrency: "unbounded" },
-      ).pipe(Effect.asVoid),
-    }).pipe(Layer.provideMerge(RuntimeDependenciesLive), Layer.provide(launcherLayer));
+                const localPort = address.port;
+                return yield* ensureTailscaleServe({
+                  localPort,
+                  servePort: config.tailscaleServePort,
+                  localHost: "127.0.0.1",
+                }).pipe(
+                  Effect.as({ localPort, servePort: config.tailscaleServePort }),
+                  Effect.tap(() =>
+                    Effect.logInfo("Tailscale Serve configured", {
+                      localPort,
+                      servePort: config.tailscaleServePort,
+                    }),
+                  ),
+                  Effect.catch((cause) =>
+                    Effect.logWarning("Failed to configure Tailscale Serve", {
+                      cause,
+                      localPort,
+                      servePort: config.tailscaleServePort,
+                    }).pipe(Effect.as(null)),
+                  ),
+                );
+              }),
+              (configured) =>
+                configured
+                  ? disableTailscaleServe({ servePort: configured.servePort }).pipe(
+                      Effect.tap(() =>
+                        Effect.logInfo("Tailscale Serve disabled", {
+                          servePort: configured.servePort,
+                        }),
+                      ),
+                      Effect.catch((cause) =>
+                        Effect.logWarning("Failed to disable Tailscale Serve", {
+                          cause,
+                          servePort: configured.servePort,
+                        }),
+                      ),
+                    )
+                  : Effect.void,
+            ),
+          )
+        : Layer.empty;
+      const cloudDesiredLinkReconcileLayer = Layer.effectDiscard(
+        Effect.gen(function* () {
+          if (!hasCloudPublicConfig) {
+            yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
+            return;
+          }
+          const releaseManagedTunnel = releaseManagedTunnelOnShutdown().pipe(
+            Effect.timeout("10 seconds"),
+            Effect.tap((released) =>
+              released ? Effect.logInfo("Released the managed tunnel on shutdown") : Effect.void,
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logWarning(
+                "Failed to release the managed tunnel on shutdown; the next link reuses it",
+                { cause },
+              ),
+            ),
+            Effect.asVoid,
+          );
+          // A launcher trial can be stopped before activation. The previous
+          // server is already gone, so the trial owns cleanup immediately; the
+          // pending-state check keeps the tunnel for normal commit or rollback,
+          // while the launcher's explicit-stop marker allows it to be released.
+          // Other runtimes wait for activation so a failed standby cannot tear
+          // down the active runtime's tunnel.
+          const cleanupBeforeActivation = yield* pendingServiceUpdateExists;
+          if (cleanupBeforeActivation) {
+            yield* Effect.addFinalizer(() => releaseManagedTunnel);
+          }
+          yield* forkParked(
+            Effect.gen(function* () {
+              if (!cleanupBeforeActivation) {
+                yield* Effect.addFinalizer(() => releaseManagedTunnel);
+              }
+              if (!(yield* CloudCliState.readCliDesiredCloudLink)) return;
+              const server = yield* HttpServer.HttpServer;
+              const address = server.address;
+              if (typeof address === "string" || !("port" in address)) return;
+              // No settling delay before the first attempt: routes are already
+              // serving by the time activation opens this gate (the startup
+              // sequence awaits routesReady), and the retry schedule below
+              // covers anything this sleep used to hedge against. Every
+              // millisecond here is dead time on the path to remote
+              // reachability after a restart.
+              yield* reconcileDesiredCloudLink(`http://127.0.0.1:${address.port}`).pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag !== "EnvironmentHttpBadRequestError" &&
+                    error._tag !== "EnvironmentHttpUnauthorizedError" &&
+                    error._tag !== "EnvironmentHttpConflictError",
+                  schedule: Schedule.exponential("1 second").pipe(
+                    Schedule.modifyDelay(({ duration }) =>
+                      Effect.succeed(Duration.min(duration, Duration.seconds(30))),
+                    ),
+                    Schedule.upTo({ duration: "10 minutes" }),
+                  ),
+                }),
+                Effect.tap(() => Effect.logInfo("T3 Connect desired link reconciled on startup")),
+                Effect.catch((cause) =>
+                  Effect.logWarning("Failed to reconcile T3 Connect desired link on startup", {
+                    cause,
+                  }),
+                ),
+              );
+            }),
+          );
+          yield* Deferred.succeed(cloudLinkParked, undefined).pipe(Effect.orDie);
+        }),
+      );
 
-    const routesLayer = HttpRouter.serve(makeRoutesLayer.pipe(Layer.provide(launcherLayer)), {
-      disableLogger: !config.logWebSocketEvents,
-    }).pipe(Layer.tap(() => Deferred.succeed(routesReady, undefined).pipe(Effect.orDie)));
-    const serverApplicationLayer = Layer.mergeAll(
-      routesLayer,
-      httpListeningLayer,
-      runtimeStateLayer,
-      tailscaleServeLayer,
-      cloudDesiredLinkReconcileLayer,
-    );
+      const runtimeServicesLive = ServerRuntimeStartup.layerWithOptions({
+        activate: Deferred.succeed(activation, undefined).pipe(Effect.asVoid),
+        abort: (error) => Deferred.die(activation, error).pipe(Effect.asVoid),
+        awaitAuxiliaryParked: Effect.all(
+          [
+            Deferred.await(runtimeStateParked),
+            Deferred.await(cloudLinkParked),
+            Deferred.await(routesReady),
+            ...(config.tailscaleServeEnabled ? [Deferred.await(tailscaleParked)] : []),
+          ],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.asVoid),
+      }).pipe(Layer.provideMerge(RuntimeDependenciesLive), Layer.provide(launcherLayer));
 
-    return serverApplicationLayer.pipe(
-      Layer.provideMerge(runtimeServicesLive),
-      Layer.provide(activationLayer),
-      Layer.provideMerge(serverRelayBrokerTracingLayer),
-      Layer.provideMerge(HttpServerLive),
-      Layer.provide(ApplicationObservabilityLive),
-      Layer.provideMerge(FetchHttpClient.layer),
-      Layer.provideMerge(VcsProcess.layer),
-      Layer.provideMerge(PlatformServicesLive),
-    );
-  }),
+      const routesLayer = HttpRouter.serve(makeRoutesLayer.pipe(Layer.provide(launcherLayer)), {
+        disableLogger: !config.logWebSocketEvents,
+      }).pipe(Layer.tap(() => Deferred.succeed(routesReady, undefined).pipe(Effect.orDie)));
+      const serverApplicationLayer = Layer.mergeAll(
+        routesLayer,
+        httpListeningLayer,
+        runtimeStateLayer,
+        tailscaleServeLayer,
+        cloudDesiredLinkReconcileLayer,
+        additionalApplicationLayer,
+      );
+
+      return serverApplicationLayer.pipe(
+        Layer.provideMerge(runtimeServicesLive),
+        Layer.provide(activationLayer),
+        Layer.provideMerge(serverRelayBrokerTracingLayer),
+        Layer.provideMerge(HttpServerLive),
+        Layer.provide(ApplicationObservabilityLive),
+        Layer.provideMerge(FetchHttpClient.layer),
+        Layer.provideMerge(VcsProcess.layer),
+        Layer.provideMerge(PlatformServicesLive),
+      );
+    }),
+  );
+
+export const makeServerLayer = makeServerLayerWithApplication(
+  Layer.empty as AdditionalServerApplicationLayer,
 );
 
 // The CLI supplies configuration.

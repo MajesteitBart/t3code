@@ -1,10 +1,10 @@
 ---
 id: T-022
 name: Implement snapshot reconciliation and stale-publish guards
-status: planned
+status: done
 workstream: WS-C
 created: 2026-08-08T10:32:32Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T15:28:21Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -26,10 +26,10 @@ Reconcile active subscriptions, active HTTP fallback snapshots, passive environm
 
 ## Acceptance Criteria
 
-- [ ] Fresh HTTP snapshots remain visible with a reconnecting source state while the active socket is unavailable.
-- [ ] A failed passive refresh changes reachability but retains that environment's last-known rows.
-- [ ] A session, environment, or refresh that has been superseded cannot publish late state, regardless of whether cancellation was observed.
-- [ ] Unknown stream items trigger one bounded canonical refresh instead of corrupting state or terminating unrelated environments.
+- [x] Fresh HTTP snapshots remain visible with a reconnecting source state while the active socket is unavailable.
+- [x] A failed passive refresh changes reachability but retains that environment's last-known rows.
+- [x] A session, environment, or refresh that has been superseded cannot publish late state, regardless of whether cancellation was observed.
+- [x] Unknown stream items trigger one bounded canonical refresh instead of corrupting state or terminating unrelated environments.
 
 ## Traceability
 
@@ -46,11 +46,21 @@ Reconcile active subscriptions, active HTTP fallback snapshots, passive environm
 
 ## Definition of Done
 
-- [ ] Implementation complete
-- [ ] Tests pass
-- [ ] Review complete
-- [ ] Docs updated
+- [x] Implementation complete
+- [x] Tests pass
+- [x] Review complete
+- [x] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T15:28:21Z: foundationConnectionState plus core-data debug/release lint passed; tests cover reconnecting active snapshots, retained passive rows, authority/session/environment/refresh fencing, ignored cancellation, one bounded coalesced canonical refresh, and malformed-snapshot isolation.
+
+- 2026-08-08T15:27:49Z: `./gradlew.bat foundationConnectionState :core-data:lintDebug :core-data:lintRelease --no-daemon` passed debug/release reconciliation, supervisor, reducer, persistence-compensation, and WS-B one-attempt protocol tests plus warnings-as-errors lint.
+
+- 2026-08-08T15:27:49Z: Deterministic tests prove active fallback rows remain `RECONNECTING`, passive failures retain last-known rows, superseded session/environment/refresh publications are rejected, cancellation-resistant canonical work cannot land late, unknown items coalesce to one six-second-bounded refresh, and malformed snapshots do not partially replace or stop unrelated state.
+
+- 2026-08-08T15:18:41Z: Implement canonical snapshot reconciliation, stale permit rejection, retained passive rows, and coalesced unknown-item refresh.
+
+- 2026-08-08T15:18:41Z: T-010 and T-011 are done; scoped reducers and publication permits are verified, so serialized reconciliation is dependency-safe.
 
 - 2026-08-08T10:32:32Z: Created from .project/templates/task.md by `delano task add`.

@@ -4,6 +4,7 @@ plugins {
   alias(libs.plugins.kotlin.android) apply false
   alias(libs.plugins.kotlin.compose) apply false
   alias(libs.plugins.kotlin.serialization) apply false
+  alias(libs.plugins.ksp) apply false
 }
 
 val androidModules = listOf(":app", ":core-data", ":core-protocol", ":core-testing")
@@ -85,11 +86,32 @@ tasks.register("foundationTransportIntegration") {
   dependsOn("verifyNativeAndroidContractFixtures", ":core-protocol:testDebugUnitTest")
 }
 
-registerReservedGate(
-  name = "foundationIntegration",
-  owner = "T-017",
-  purpose = "the disposable server integration harness",
-)
+tasks.register("foundationPersistence") {
+  group = "verification"
+  description = "Runs Room/Keystore persistence tests, including device-backed process recreation."
+  dependsOn(
+    ":core-data:testDebugUnitTest",
+    ":core-data:testReleaseUnitTest",
+    ":core-data:connectedDebugAndroidTest",
+  )
+}
+
+tasks.register("foundationConnectionState") {
+  group = "verification"
+  description = "Runs scoped-state, supervision, reconciliation, and ambiguity policy tests."
+  dependsOn(
+    ":core-data:testDebugUnitTest",
+    ":core-data:testReleaseUnitTest",
+    ":core-protocol:testDebugUnitTest",
+    ":core-protocol:testReleaseUnitTest",
+  )
+}
+
+tasks.register("foundationIntegration") {
+  group = "verification"
+  description = "Runs the disposable two-server T3 integration harness."
+  dependsOn(":core-testing:nativeAndroidIntegrationTest")
+}
 registerReservedGate(
   name = "foundationAccessibility",
   owner = "T-016",

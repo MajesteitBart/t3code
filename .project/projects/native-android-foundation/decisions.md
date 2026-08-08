@@ -3,7 +3,7 @@ name: Native Android Client Foundation
 slug: native-android-foundation
 owner: team
 created: 2026-08-07T13:09:35Z
-updated: 2026-08-08T13:05:09Z
+updated: 2026-08-08T16:47:00Z
 ---
 
 # Decisions: Native Android Client Foundation
@@ -38,12 +38,14 @@ updated: 2026-08-08T13:05:09Z
 - Decision: transport attempts do not retry themselves. Per-environment state owners use one active/passive policy: only the active environment owns live WebSocket subscriptions; passive environments use bounded, low-frequency HTTP refresh. The supervisor layer owns backoff, reachability, reconnect, resubscription, active-session replacement, and lifecycle release.
 - Rationale: duplicate retry layers are a primary cause of duplicate subscriptions, commands, and stale state.
 - Consequence: passive read failures retain last-known rows and only update reachability. Fresh HTTP state while the active socket reconnects is presented as current data with a `reconnecting` source state. Timing/backoff values are configurable and deterministically tested rather than copied as immutable Swift constants.
+- Cancellation consequence: WS-B's typed `CancelledFailure` is also a `CancellationException`. A supervisor checks whether its own coroutine is still active before classifying it: an active typed transport cancellation remains retryable, while genuine lifecycle cancellation is rethrown.
 
 ### D-006 — Separate secrets from state
 
 - Decision: Android Keystore-backed storage owns access credentials; Room owns non-secret environment metadata and last-known state. Pairing credentials are exchanged and discarded. Save writes the exchanged credential before the catalog and compensates on catalog failure; removal writes the catalog before credential deletion and restores the catalog on deletion failure.
 - Rationale: deletion, corruption, backup, and migration semantics differ between secrets and ordinary application state.
 - Consequence: the foundation credential envelope has an explicit, fail-closed direct-bearer discriminator. DPoP binding fields and managed-credential migrations are added only by the later T3 Connect project.
+- Cancellation consequence: cross-repository compensation runs in a non-cancellable context, then rethrows genuine lifecycle cancellation unchanged with any rollback failures suppressed.
 
 ### D-007 — Prefer Android-native interaction outcomes
 
@@ -60,6 +62,7 @@ updated: 2026-08-08T13:05:09Z
 - Decision: preserve `{commandId, messageId, createdAt}` for a logical turn. After a sent response is lost, fetch a fresh thread snapshot and treat the matching `messageId` as committed; if the commit cannot be confirmed, surface ambiguity and keep the same identity for a later explicit retry.
 - Rationale: the Swift reference correctly avoids blind replay, while the canonical server also persists receipts keyed by `commandId`. Snapshot verification is the client recovery contract; server receipt/domain-event evidence remains the backstop proof.
 - Consequence: transport never replays sent unary calls. Bootstrap/worktree-specific partial recovery is deferred with the new-task/chat project.
+- Implementation: `PreparedStableTurn` freezes the identity and canonical payload, while `StableTurnRecovery` performs fresh-snapshot verification before any explicit resend and retains the original turn when verification is absent or unavailable.
 
 ### D-010 — Separate trusted route injection from arbitrary pairing input
 
@@ -87,6 +90,7 @@ updated: 2026-08-08T13:05:09Z
 - Decision: pin OkHttp/MockWebServer `5.4.0`, kotlinx.coroutines `1.11.0`, and kotlinx.serialization JSON `1.11.0` in the standalone version catalog. HTTP and WebSocket attempts will use the shared OkHttp client with library-level retries disabled; supervisors remain the only retry owners.
 - HTTP compression: OkHttp documents transparent gzip response handling. Callers must not add their own unconditional gzip decoding; conformance tests will verify compressed canonical responses. Source: [OkHttp project documentation](https://github.com/lysine-dev/okhttp).
 - WebSocket compression: OkHttp 5.4.0 offers `permessage-deflate` and compresses outbound messages at or above its configurable `minWebSocketMessageToCompress` threshold (1024 bytes by default). The public `WebSocketListener.onOpen` receives the HTTP 101 `Response`, so the negotiated `Sec-WebSocket-Extensions` header is observable without internal APIs. T-007/T-021 must still prove a controlled compressed round trip because a header alone does not prove compatible frame encode/decode. Sources: [OkHttp compression setting](https://square.github.io/okhttp/5.x/okhttp/okhttp3/-ok-http-client/-builder/min-web-socket-message-to-compress.html) and OkHttp 5.4.0 `WebSocketListener`/`RealWebSocket` source.
+- Fixture consequence: the disposable integration harness keeps retries and redirects disabled and configures zero idle HTTP connections. Each fixture operation remains one attempt, while a typed control/drain interval cannot leave an idle socket eligible for stale reuse.
 
 ### D-014 — Exercise Android 16 local-network restrictions without over-declaring release permissions
 
@@ -103,10 +107,15 @@ updated: 2026-08-08T13:05:09Z
 - `t3-native-controls` — **defer and replace natively in Compose**. Expo coupling is the feature: the module reads `appContext.currentActivity`/`reactContext` showcase files and extras (`T3NativeControlsModule.kt:10-33`) and wraps a small `ExpoView`/event dispatcher (`T3HeaderButtonView.kt:8-22`). There is no JNI, packaged resource, third-party dependency, or module-local license; it inherits the mobile root SDK toolchain and repository MIT license. Its only reusable drawing is a 64-line private Canvas icon view (`T3HeaderButtonView.kt:34-97`), so sharing would cost more adapter surface than a semantic Compose icon/button implementation. Keep the React Native module unchanged; do not extract its showcase file protocol into the native app.
 - Gate ownership: T-020 owns the proceed/revise/stop call for any reuse project. `t3-review-diff` and `t3-composer-editor` require an approved measurable outcome, an ordinary Android boundary, retained thin Expo adapters, the focused RN checks above, license retention, and baseline performance evidence. Terminal additionally requires a supported NDK/CMake/Zig/Ghostty supply-chain plan and ABI/16-KiB-page tests. Native controls has no extraction prerequisite because replacement is the decision.
 
+### D-016 — Keep real-server test control outside the production protocol
+
+- Decision: the native Android integration fixture starts the normal server runtime with an additional test application layer and a line-delimited stdin/stdout control channel for description, snapshots, receipts, events, drains, and session revocation.
+- Rationale: recovery and idempotency need deterministic observation of the real event store and reactors, but a production receipt/debug API would enlarge the public protocol only for tests.
+- Consequence: both server homes stay worktree-local and isolated; tests capture exact PIDs, ports, listener ownership, and redacted diagnostics. Product clients continue to use the existing authenticated HTTP and Effect RPC contracts.
+
 ## Provisional Decisions
 
 - Constructor composition is preferred over a dependency-injection framework during foundation.
-- Room `2.8.4` is the selected non-secret persistence library for WS-C; its schema and processor wiring remain T-009 scope.
 
 These values are foundation architecture choices, not public-release commitments.
 
@@ -116,7 +125,6 @@ These values are foundation architecture choices, not public-release commitments
 
 ## Open Decision Questions
 
-- Are contract fixtures checked in, generated during a focused command, or both?
 - Which CI runner/emulator and physical-device class define the initial performance bar?
 - Does FCM/relay support follow immediately after foundation or after core chat/workspace parity?
 - Who owns signing, Clerk, FCM, Play Console, and release operations for later projects?

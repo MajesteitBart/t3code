@@ -1,0 +1,120 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "9935c84f7c637c0c9a204edfabab1197",
+    "entities": [
+      {
+        "tableName": "environments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`environmentId` TEXT NOT NULL, `label` TEXT NOT NULL, `httpBaseUrl` TEXT NOT NULL, `webSocketBaseUrl` TEXT NOT NULL, `descriptorJson` TEXT NOT NULL, PRIMARY KEY(`environmentId`))",
+        "fields": [
+          {
+            "fieldPath": "environmentId",
+            "columnName": "environmentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "httpBaseUrl",
+            "columnName": "httpBaseUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "webSocketBaseUrl",
+            "columnName": "webSocketBaseUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "descriptorJson",
+            "columnName": "descriptorJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": ["environmentId"]
+        }
+      },
+      {
+        "tableName": "application_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`singletonId` INTEGER NOT NULL, `activeEnvironmentId` TEXT, PRIMARY KEY(`singletonId`))",
+        "fields": [
+          {
+            "fieldPath": "singletonId",
+            "columnName": "singletonId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeEnvironmentId",
+            "columnName": "activeEnvironmentId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": ["singletonId"]
+        }
+      },
+      {
+        "tableName": "last_known_shell",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`environmentId` TEXT NOT NULL, `snapshotSequence` INTEGER NOT NULL, `snapshotJson` TEXT NOT NULL, PRIMARY KEY(`environmentId`), FOREIGN KEY(`environmentId`) REFERENCES `environments`(`environmentId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "environmentId",
+            "columnName": "environmentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshotSequence",
+            "columnName": "snapshotSequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshotJson",
+            "columnName": "snapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": ["environmentId"]
+        },
+        "indices": [
+          {
+            "name": "index_last_known_shell_environmentId",
+            "unique": false,
+            "columnNames": ["environmentId"],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_last_known_shell_environmentId` ON `${TABLE_NAME}` (`environmentId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "environments",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": ["environmentId"],
+            "referencedColumns": ["environmentId"]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9935c84f7c637c0c9a204edfabab1197')"
+    ]
+  }
+}

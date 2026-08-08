@@ -2,9 +2,9 @@
 id: WS-C
 name: WS-C Persistence and Connection State
 owner: team
-status: planned
+status: done
 created: 2026-08-07T13:12:09Z
-updated: 2026-08-07T13:12:21Z
+updated: 2026-08-08T16:31:01Z
 operating_mode: multi-stream
 ---
 

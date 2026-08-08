@@ -12,7 +12,9 @@ The server decider produces persisted events; projectors derive read models. Com
 
 One transport attempt does not own retry policy. Supervisors handle environment lifecycle, backoff, reachability, resubscription, last-known data, and active/passive connection behavior. Multi-environment identifiers must be scoped to prevent collisions.
 
-Native Android now makes that boundary executable: `OneAttemptHttpClient` disables retry/redirect replay, and `TicketedRpcSession` owns one ticket/socket generation, sent-versus-unsent classification, current-generation cancellation, and terminal closure. WS-C may construct replacement sessions and recreate only long-lived intent; the transport never reconnects, backs off, replays sent unary work, or resubscribes one-shot work.
+Native Android now makes that boundary executable: `OneAttemptHttpClient` disables retry/redirect replay, and `TicketedRpcSession` owns one ticket/socket generation, sent-versus-unsent classification, current-generation cancellation, and terminal closure. `EnvironmentConnectionSupervisor` is the sole replacement/backoff owner, keeps at most one live subscription on the active environment, refreshes passive environments through bounded HTTP, and recreates only long-lived intent. Transport never reconnects, backs off, replays sent unary work, or resubscribes one-shot work.
+
+`ShellStateReconciler` serializes persisted, HTTP, and stream publications behind environment/owner/refresh epochs. It retains last-known rows through passive failure, rejects superseded results even when cancellation loses a race, and coalesces unknown stream members into one guarded canonical refresh. `PreparedStableTurn` freezes logical identity and payload; `StableTurnRecovery` verifies a fresh thread snapshot before any explicit resend.
 
 ## Thin UI, Explicit Native Adapter
 
@@ -31,3 +33,5 @@ Match user outcomes and server semantics while using native platform conventions
 ## Conservative Delivery
 
 Delano lifecycle state lives in `.project`, runtime assets in `.agents`, and compatibility adapters stay thin. Installation or upgrades preserve repository-owned project/context state. External tracker writes, public artifacts, commits, pushes, and PRs require explicit approval.
+
+Real-server integration uses the normal server layer plus a test-only application layer and stdin/stdout control channel. It never adds product receipt/debug endpoints, touches live T3 homes, scans broadly for processes, or tears down anything except captured process objects and validated fixture roots.

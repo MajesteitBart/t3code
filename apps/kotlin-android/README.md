@@ -11,7 +11,7 @@ This is the standalone Kotlin/Jetpack Compose client. Its Gradle build is indepe
 
 The checked-in Gradle 8.13 wrapper downloads its distribution from Gradle and verifies the pinned SHA-256 checksum. No machine-installed Gradle, Node workspace install, Expo process, signing credential, pairing code, or T3 home directory is required. `foundationAssemble` produces an unsigned release-shaped APK; release signing remains follow-on release work.
 
-The contract-conformance command is the one exception: it also requires the repository's Node 24/pnpm workspace install because it verifies checked-in Kotlin fixtures against the live canonical TypeScript schemas and installed Effect RPC protocol.
+The contract-conformance and disposable integration commands also require the repository's Node 24/pnpm workspace install. Contract conformance verifies checked-in Kotlin fixtures against the live canonical TypeScript schemas and installed Effect RPC protocol; integration starts the normal server runtime through a test-only control seam.
 
 On Windows PowerShell, use `./gradlew.bat`; on macOS/Linux, substitute `./gradlew`.
 
@@ -36,6 +36,18 @@ cd apps/kotlin-android
 # Run transport races plus a real compressed OkHttp WebSocket round trip.
 ./gradlew.bat foundationTransportIntegration
 
+# Run pure compensation/envelope tests plus API-device Room migration,
+# Android Keystore, process-recreation, corruption, and deletion checks.
+./gradlew.bat foundationPersistence
+
+# Run pure scoped identity, reducer, active/passive supervision,
+# reconciliation, stale-publication, and ambiguity-policy checks.
+./gradlew.bat foundationConnectionState
+
+# Start two isolated disposable T3 servers, seed colliding raw IDs, and verify
+# snapshots, durable receipts, domain events, worker drains, and exact teardown.
+./gradlew.bat foundationIntegration
+
 # Install only the development variant on the selected connected device.
 ./gradlew.bat foundationInstallDevelopment
 
@@ -45,14 +57,15 @@ cd apps/kotlin-android
 
 These tasks are deliberately native-Android-only. They do not invoke the repository-wide test, lint, typecheck, Expo, or React Native pipelines.
 
+`foundationPersistence` requires one selected connected Android device or emulator. It stores only synthetic test values in the instrumentation package sandbox and removes its database, preferences, and test-only Keystore entry after each test. The production storage and state contracts are documented in [`core-data/PERSISTENCE.md`](core-data/PERSISTENCE.md) and [`core-data/STATE.md`](core-data/STATE.md).
+
+`foundationIntegration` creates two separate homes below the worktree's gitignored `.t3` directory, removes ambient T3/Vite routing variables from both child environments, and never touches live developer state. It captures and cross-checks each spawned PID, working directory, base directory, resolved port, and exact listener owner. Startup credentials remain in redacted in-memory wrappers; failure diagnostics redact token, bearer, credential, authorization, and pairing-fragment forms. Fixture HTTP remains one-attempt with redirects and retries disabled, while a zero-idle connection pool prevents setup from selecting a socket closed during a typed control/drain interval. Teardown uses only the two captured `Process` objects and removes only the validated fixture root.
+
 ## Reserved evidence gates
 
 The following stable command names resolve today but intentionally fail closed until their owning task replaces the placeholder with real evidence. Listing or dry-running a task is not evidence that its gate passes.
 
 ```powershell
-# T-017: disposable, isolated T3 server integration harness.
-./gradlew.bat foundationIntegration
-
 # T-016: TalkBack, traversal, touch-target, font-scale, and lifecycle checklist.
 ./gradlew.bat foundationAccessibility
 
@@ -60,7 +73,7 @@ The following stable command names resolve today but intentionally fail closed u
 ./gradlew.bat foundationPerformance
 ```
 
-Future integration helpers must require an explicitly isolated home and port, print the exact PID they start, redact credentials/tickets/pairing material, and stop only that captured PID. They must never default to or mutate live T3 developer state.
+Future integration scenarios must reuse the isolated harness and its typed control operations instead of adding production receipt/debug APIs, timing sleeps, ambient homes, broad process scans, or transport retries.
 
 ## Useful inspection
 
@@ -71,5 +84,5 @@ Future integration helpers must require an explicitly isolated home and port, pr
 ./gradlew.bat tasks --group verification
 
 # Resolve every still-reserved gate without running its fail-closed action.
-./gradlew.bat foundationIntegration foundationAccessibility foundationPerformance --dry-run
+./gradlew.bat foundationAccessibility foundationPerformance --dry-run
 ```

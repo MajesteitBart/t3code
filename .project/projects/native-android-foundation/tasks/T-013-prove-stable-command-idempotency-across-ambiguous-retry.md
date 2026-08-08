@@ -1,10 +1,10 @@
 ---
 id: T-013
 name: Prove ambiguous turn recovery with stable identity
-status: planned
+status: done
 workstream: WS-C
 created: 2026-08-07T13:16:59Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T16:57:47Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -26,12 +26,12 @@ Add a test-only turn path that preserves stable command/message identity, verifi
 
 ## Acceptance Criteria
 
-- [ ] The fixture deliberately loses the first client response after server acceptance.
-- [ ] The logical turn fixes `{commandId, messageId, createdAt}` on first attempt and reuses it verbatim for every later explicit attempt.
-- [ ] A fresh thread snapshot containing `messageId` resolves the lost response as success without replay; an unavailable/absent confirmation surfaces ambiguity and preserves the identity.
-- [ ] An explicit retry first repeats commit verification and, only when still uncommitted, sends the identical wire payload; transport itself never replays the sent request.
-- [ ] Server evidence shows one accepted durable receipt and one matching message/domain effect, and the test waits on typed receipts/drains rather than sleeps or polling.
-- [ ] No production debug screen or alternate protocol is introduced.
+- [x] The fixture deliberately loses the first client response after server acceptance.
+- [x] The logical turn fixes `{commandId, messageId, createdAt}` on first attempt and reuses it verbatim for every later explicit attempt.
+- [x] A fresh thread snapshot containing `messageId` resolves the lost response as success without replay; an unavailable/absent confirmation surfaces ambiguity and preserves the identity.
+- [x] An explicit retry first repeats commit verification and, only when still uncommitted, sends the identical wire payload; transport itself never replays the sent request.
+- [x] Server evidence shows one accepted durable receipt and one matching message/domain effect, and the test waits on typed receipts/drains rather than sleeps or polling.
+- [x] No production debug screen or alternate protocol is introduced.
 
 ## Traceability
 
@@ -48,11 +48,19 @@ Add a test-only turn path that preserves stable command/message identity, verifi
 
 ## Definition of Done
 
-- [ ] Implementation complete
-- [ ] Tests pass
-- [ ] Review complete
-- [ ] Docs updated
+- [x] Implementation complete
+- [x] Tests pass
+- [x] Review complete
+- [x] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T16:57:47Z: Post-close review preserves definitive typed rejections outside ambiguity recovery; 6 stable-turn cases pass in debug/release and the final combined real-server gate passes.
+
+- 2026-08-08T16:31:01Z: StableTurnRecoveryTest passed 5 cases in debug and release; nativeAndroidIntegrationTest passed 4 real-server tests including lost-after-acceptance recovery. The stable test verified one dispatch before fresh-snapshot recovery, byte-identical explicit retry behavior, one durable accepted receipt, one matching message and turn-start effect after a deliberate duplicate, and typed drain synchronization. core-data/core-testing debug and release lint passed; STATE.md documents the contract.
+
+- 2026-08-08T16:22:03Z: Implement stable turn identity, fresh snapshot verification before replay, and durable receipt/domain-effect evidence through the disposable fixture.
+
+- 2026-08-08T16:22:02Z: T-017 and T-022 are done; T-012 has closed, so the serial command-integration conflict zone is clear.
 
 - 2026-08-07T13:16:59Z: Created from .project/templates/task.md by `delano task add`.

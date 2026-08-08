@@ -1,10 +1,10 @@
 ---
 id: T-012
 name: Verify process death and multi-environment recovery
-status: planned
+status: done
 workstream: WS-C
 created: 2026-08-07T13:17:00Z
-updated: 2026-08-08T10:32:44Z
+updated: 2026-08-08T16:21:38Z
 linear_issue_id:
 github_issue:
 github_pr:
@@ -26,11 +26,11 @@ Exercise two isolated colliding environments through process recreation, active/
 
 ## Acceptance Criteria
 
-- [ ] A forced process recreation restores both environments, active selection, and last-known scoped rows.
-- [ ] Offline startup renders last-known state and reconciles it after connectivity returns.
-- [ ] A failed passive read marks only that environment unreachable and retains its last-known rows; activating it transfers live-subscription ownership without duplicate sockets.
-- [ ] An authorized HTTP or ticket-mint 401 marks only the affected direct environment revoked/re-pair-required with no auth loop; removal clears the correct credential, state, and owner without affecting the other environment.
-- [ ] The integration run records no duplicate subscriptions, stale routes, or cross-environment state leakage.
+- [x] A forced process recreation restores both environments, active selection, and last-known scoped rows.
+- [x] Offline startup renders last-known state and reconciles it after connectivity returns.
+- [x] A failed passive read marks only that environment unreachable and retains its last-known rows; activating it transfers live-subscription ownership without duplicate sockets.
+- [x] An authorized HTTP or ticket-mint 401 marks only the affected direct environment revoked/re-pair-required with no auth loop; removal clears the correct credential, state, and owner without affecting the other environment.
+- [x] The integration run records no duplicate subscriptions, stale routes, or cross-environment state leakage.
 
 ## Traceability
 
@@ -46,11 +46,17 @@ Exercise two isolated colliding environments through process recreation, active/
 
 ## Definition of Done
 
-- [ ] Implementation complete
-- [ ] Tests pass
-- [ ] Review complete
-- [ ] Docs updated
+- [x] Implementation complete
+- [x] Tests pass
+- [x] Review complete
+- [x] Docs updated
 
 ## Evidence Log
+
+- 2026-08-08T16:21:38Z: foundationIntegration: 3 tests passed across real isolated T3 servers; foundationPersistence: 4 API 35 device tests plus debug/release unit tests passed; lintDebug/lintRelease and release integration compile passed; Delano validation passed. Recovery asserts restored credentials/scoped rows, offline reconcile, exact one-session ownership, stale-owner rejection, HTTP fallback, scoped revocation/removal, and no leakage. STATE.md and PERSISTENCE.md updated.
+
+- 2026-08-08T16:02:41Z: Exercise real two-environment restore, active/passive ownership, outage/restart, revocation, stale guards, and scoped removal.
+
+- 2026-08-08T16:02:41Z: T-017 and T-022 are done with real two-server, typed drain/receipt, and reconciliation evidence; T-012 is dependency-ready.
 
 - 2026-08-07T13:17:00Z: Created from .project/templates/task.md by `delano task add`.
